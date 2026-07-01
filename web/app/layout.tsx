@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 import { Navbar } from "@/components/navbar";
 import { QueryProvider } from "@/components/query-provider";
+import { Toaster } from "sonner";
 
 export const metadata: Metadata = {
   title: "SurvCut — Survey Cutter",
@@ -25,6 +26,19 @@ export default function RootLayout({
               </main>
             </div>
           </div>
+          <Toaster
+            theme="dark"
+            position="bottom-right"
+            toastOptions={{
+              style: {
+                background: "rgba(24, 24, 27, 0.95)",
+                border: "1px solid rgba(255, 255, 255, 0.1)",
+                color: "#F4F4F5",
+                backdropFilter: "blur(12px)",
+              },
+              className: "font-sans",
+            }}
+          />
         </QueryProvider>
       </body>
     </html>

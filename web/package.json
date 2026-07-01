@@ -19,7 +19,8 @@
     "clsx": "^2.1.0",
     "tailwind-merge": "^2.5.0",
     "lucide-react": "^0.446.0",
-    "class-variance-authority": "^0.7.0"
+    "class-variance-authority": "^0.7.0",
+    "sonner": "^1.5.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

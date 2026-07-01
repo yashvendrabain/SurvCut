@@ -1,6 +1,6 @@
-/** Typed API client. During dev, `/api/*` is rewritten to http://localhost:8000/api/* (see next.config.ts). */
+/** Typed API client. `/api/*` is rewritten to http://localhost:8000/api/* by next.config.ts. */
 
-const BASE = "";  // relative — Next.js rewrite handles the origin
+const BASE = "";
 
 export interface UploadResponse {
   session_id: string;
@@ -36,6 +36,11 @@ export interface CrossCutResponse {
   warnings: string[];
 }
 
+export interface BuildResponse {
+  workbook_path: string;
+  size_bytes: number;
+}
+
 export async function uploadCombined(file: File): Promise<UploadResponse> {
   const fd = new FormData();
   fd.append("file", file);
@@ -60,4 +65,30 @@ export async function computeCrossCut(
   });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
+}
+
+export async function buildWorkbook(
+  sessionId: string,
+  themeNames: string[],
+  themeQuestionIds: string[][],
+  filterColumnIds: string[],
+  queuedCrossCuts: Array<{ row_qid: string; col_qid: string }>
+): Promise<BuildResponse> {
+  const r = await fetch(`${BASE}/api/export/build`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_id: sessionId,
+      theme_names: themeNames,
+      theme_question_ids: themeQuestionIds,
+      filter_column_ids: filterColumnIds,
+      queued_cross_cuts: queuedCrossCuts,
+    }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+}
+
+export function downloadUrl(sessionId: string): string {
+  return `${BASE}/api/export/download/${sessionId}`;
 }
