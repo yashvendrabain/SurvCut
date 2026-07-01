@@ -1,0 +1,45 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    color-scheme: dark;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    background: theme("colors.ink.950");
+    color: theme("colors.ink.100");
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  }
+
+  ::selection {
+    background: theme("colors.bain.500");
+    color: white;
+  }
+}
+
+@layer components {
+  .glass {
+    background: rgba(24, 24, 27, 0.6);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+  }
+
+  .btn-bain {
+    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-lg
+           bg-bain-500 hover:bg-bain-600 active:bg-bain-700
+           text-white font-semibold text-sm
+           transition-all duration-150
+           shadow-lg shadow-bain-500/20 hover:shadow-bain-500/40;
+  }
+
+  .btn-ghost {
+    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-lg
+           bg-white/5 hover:bg-white/10 border border-white/10
+           text-ink-100 font-semibold text-sm
+           transition-all duration-150;
+  }
+}
