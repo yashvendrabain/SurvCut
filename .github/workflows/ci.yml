@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  python:
+    name: Python — engine + api
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install engine + api (editable)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ./engine
+          pip install -e ./api
+          pip install pytest httpx
+
+      - name: Engine tests
+        working-directory: ./engine
+        run: python -m pytest -q
+
+      - name: API tests
+        working-directory: ./api
+        run: python -m pytest -q
+
+  node:
+    name: Node — web
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package.json
+
+      - name: Install
+        working-directory: ./web
+        run: npm install
+
+      - name: Typecheck
+        working-directory: ./web
+        run: npm run typecheck
+
+      - name: Lint
+        working-directory: ./web
+        run: npm run lint
+
+      - name: Build
+        working-directory: ./web
+        run: npm run build

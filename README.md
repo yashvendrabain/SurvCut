@@ -1,89 +1,146 @@
-﻿# Survey Cutter Tool
+<div align="center">
 
-A spec-driven survey cutter that turns a bracketed datamap + raw survey data into a Bain-style cuts workbook.
+# SurvCut
 
-## Repository layout
+**Spec-driven survey cutter — Bain-internal.** Upload a bracketed datamap + raw survey data. Get a live-formulas Excel workbook with every cut shape, filter dropdowns, and cross-cuts. Under a minute end-to-end.
 
-`
-cutter_v2/                     # the engine (pure Python, no UI)
-  core/
-    question_type_detector.py  # SWAP-POINT for type identification
-    datamap_parser.py          # strict bracketed-format parser + state machine
-    classifier.py              # ParsedBlock -> QuestionSpec orchestration
-    single_cut.py              # per-type cut computers
-    cross_cut.py               # dynamic row x col matrix engine
-    exporter.py                # Excel workbook writer (formulas + helpers)
-    theme_grouper.py           # Q-ID-range routing
-    validator.py               # datamap <-> raw data cross-check
-    models.py                  # frozen dataclasses (public contracts)
-  CUTS_FRAMEWORK.md            # cut shapes catalog (S1..S11) + Phase 1/2 scope
-  QUESTION_TYPES_REFERENCE.md  # engine internals reference
-  DATAMAP_SPEC.md              # required datamap format
+```
+┌──────────────────────────────────────────┐
+│  web/    →  Next.js 15 + Tailwind        │
+│  api/    →  FastAPI + Pydantic           │
+│  engine/ →  cutter-engine (pip package)  │
+└──────────────────────────────────────────┘
+```
 
-cutter_v3/                     # Reflex frontend (wizard UI on top of cutter_v2)
-  cutter_v3/
-    state.py                   # global reactive state, event handlers
-    components/
-      shell.py                 # navbar + busy banner
-    pages/
-      upload.py                # drop-a-file + parse
-      validate.py              # schema + validation view
-      themes.py                # theme + filter picker
-      crosscuts.py             # cross-cut builder
-      generate.py              # build + download
-    cutter_v3.py               # app entry (routes)
-  rxconfig.py                  # Reflex config (ports 3003 / 8003)
-`
+</div>
 
-## The engine is a clean module
+---
 
-`cutter_v2/core/` is intentionally UI-free. It can be:
-- Imported directly by `cutter_v3` (current setup)
-- Wrapped in a FastAPI service (future architecture)
-- Called from a notebook / CI job
-- Packaged and pip-installed independently
+## Monorepo layout
 
-The public contract lives in `models.py` (`ParsedBlock`, `QuestionSpec`, `SurveySchema`, `CrossCutResult`…). Everything else in `core/` implements against those types.
+```
+SurvCut/
+├── engine/              # cutter-engine — pure Python core (framework-agnostic)
+│   ├── src/cutter_engine/
+│   ├── tests/
+│   └── pyproject.toml
+├── api/                 # FastAPI service that imports cutter-engine
+│   ├── app/
+│   │   ├── main.py
+│   │   ├── deps.py
+│   │   ├── routers/
+│   │   └── schemas/
+│   ├── tests/
+│   ├── Dockerfile
+│   └── pyproject.toml
+├── web/                 # Next.js 15 + Tailwind + TanStack Query
+│   ├── app/
+│   ├── components/
+│   ├── lib/
+│   ├── Dockerfile
+│   └── package.json
+├── docs/                # Framework specs and internal references
+│   ├── CUTS_FRAMEWORK.md
+│   ├── QUESTION_TYPES_REFERENCE.md
+│   ├── DATAMAP_SPEC.md
+│   └── SCHEMA.md
+├── infra/
+│   └── docker-compose.yml
+├── .github/workflows/
+│   └── ci.yml
+├── cutter_v2/           # legacy Streamlit / library entry (kept for reference)
+├── cutter_v3/           # legacy Reflex UI (kept for reference)
+└── README.md
+```
 
-## Datamap format contract
+### The layer boundary is the whole point
 
-The parser only accepts bracketed headers: `[Q1]: text`. See `cutter_v2/DATAMAP_SPEC.md` for the full contract. Non-bracketed input is rejected with a clean error pointing at the cleaning step.
+`engine/` has zero UI or HTTP dependencies. Any layer above can be replaced without touching the engine, and the engine can be replaced (e.g. with an explicit-format detector) without touching the layers above. The public contract lives in `engine/src/cutter_engine/models.py`.
 
-## Running Cutter v3 (Reflex) locally
+---
 
-Requires Python 3.12+ and Node.js 22+.
+## Quick start (local dev)
 
-`powershell
-cd cutter_v3
-python -m venv .venv
-.venv\Scripts\activate
-pip install reflex openpyxl pandas
-reflex run
-`
+Requires Python 3.11+ and Node.js 22+.
 
-Open http://localhost:3003.
+```bash
+# 1. Install the engine + API as editable packages
+pip install -e ./engine
+pip install -e ./api
 
-## What's in scope (Phase 1)
+# 2. Start the API (port 8000)
+uvicorn app.main:app --reload --port 8000 --app-dir api
 
-- 10 question types detected + cut per type (single, multi, grid, NPS, ranking, direct-numeric, etc.)
-- Global-filter block with VLOOKUP label -> code translation
-- Cross-cut engine with row-and-column support for grid/ranking/numeric-allocation
-- Ranking blocks laid out as ranks x options matrix
-- Multi-select and ranking use a per-question `_q_sum_<col_id>` helper column for correct base counts
-- Cross-cut sheets show `# of respondents` grouped, then `% of respondents` grouped (base = column total)
-- Master Check cell + IFERROR wrapping throughout
+# 3. In another terminal, start the web (port 3000)
+cd web
+pnpm install       # or: npm install
+pnpm dev           # or: npm run dev
+```
 
-## What's out of scope (Phase 2 — deferred)
+Open http://localhost:3000. The frontend proxies `/api/*` → `http://localhost:8000/api/*` via `next.config.ts`.
+
+## Quick start (Docker)
+
+```bash
+docker compose -f infra/docker-compose.yml up --build
+```
+
+Brings up `redis` (for the future Celery queue), `api` on 8000, `web` on 3000.
+
+---
+
+## What's built (Phase 1)
+
+**Engine** (`engine/`):
+- 10 question types with dedicated per-type computers and Excel block writers
+- Bracketed-format datamap parser + `[pipe: helper]` detection
+- `_q_sum_<col_id>` helper column for RANKING + MULTI_SELECT base counts
+- Ranking blocks laid out as ranks × options matrix
+- Cross-cut engine — grid/ranking/numeric-allocation work on both row & column axes
+- Cross-cut sheets show grouped `# of respondents` then grouped `% of respondents`
+- VLOOKUP label → code filter pass-through so numeric-coded raw data still matches label dropdowns
+- Master Check cell + IFERROR wrapping throughout the workbook
+- Datamap ↔ raw data cross-check (validator)
+- Type identification isolated in `question_type_detector.py` as the future swap-point
+
+**API** (`api/`):
+- FastAPI factory with 4 routers under `/api/{upload,schema,crosscuts,export}`
+- Session-cached uploads (in-process for Phase 1; Redis-backed in Phase 2)
+- Auto-generated OpenAPI docs at `/docs`
+- Synchronous build for now; endpoint signatures stable for future Celery migration
+
+**Web** (`web/`):
+- Next.js 15 (App Router) + React 19 + TypeScript strict
+- Bain-red brand + dark theme by default
+- Landing page with animated hero, glass-morphism cards, grid + radial-red background
+- 5-step wizard shell with sticky navbar (Upload / Validate / Themes / Cross Cuts / Generate)
+- Typed API client mirroring the FastAPI Pydantic models
+
+---
+
+## Deferred to Phase 2
 
 - WLO segmentation (Winners / Laggards / Others)
 - Blacklist criteria filter
-- MPPM-style category filters
-- Explicit-format datamap (declared `Type: ranking` lines) — will replace heuristic detection when introduced
-- Theme sheet preset duplicates
+- MPPM category filters
+- Theme sheet preset duplicates (`Pricing` + `Pricing_Omnibus` pattern)
+- Explicit-format datamap (`Type: ranking` declarations) — will replace heuristic detection
 - Word Cloud / verbatim analysis
+- Real ML endpoints (auto-theming, smart cross-cut suggestions)
+- Azure AD SSO
+- Celery + Redis for async build jobs
+
+---
 
 ## Docs
 
-- [`cutter_v2/CUTS_FRAMEWORK.md`](cutter_v2/CUTS_FRAMEWORK.md) — cut shape catalog + Phase 1 scope
-- [`cutter_v2/QUESTION_TYPES_REFERENCE.md`](cutter_v2/QUESTION_TYPES_REFERENCE.md) — engine internals (dispatch tables, function signatures)
-- [`cutter_v2/DATAMAP_SPEC.md`](cutter_v2/DATAMAP_SPEC.md) — datamap format contract
+- [`docs/CUTS_FRAMEWORK.md`](docs/CUTS_FRAMEWORK.md) — cut shape catalog (S1..S11) + Phase 1/2 scope
+- [`docs/QUESTION_TYPES_REFERENCE.md`](docs/QUESTION_TYPES_REFERENCE.md) — engine internals reference
+- [`docs/DATAMAP_SPEC.md`](docs/DATAMAP_SPEC.md) — required bracketed datamap format
+- [`engine/README.md`](engine/README.md), [`api/README.md`](api/README.md), [`web/README.md`](web/README.md) — per-layer READMEs
+
+---
+
+## Legacy
+
+`cutter_v2/` and `cutter_v3/` remain in the tree until feature parity is confirmed. They will be removed when the new stack ships. Everything in them has already been ported to `engine/`.
