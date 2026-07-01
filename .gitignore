@@ -1,0 +1,36 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Node / Reflex frontend build artifacts
+.web/
+.next/
+.turbo/
+node_modules/
+
+# OS + Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test outputs / temp
+*.tmp
+*.bak
+*.bak_*
+cutter_v3_*.xlsx
+sample_cutter_output*.xlsx
+sample_with_xcuts*.xlsx
+Binary Data_Datamap*.xlsx
+CE Longitudinal*.xlsx
+CE Growth*.xlsx
+250307_*
+260223_*
+
+# Reflex runtime state
+.reflex/
