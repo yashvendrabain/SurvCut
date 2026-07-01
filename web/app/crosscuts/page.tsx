@@ -59,7 +59,7 @@ export default function CrossCutsPage() {
   function queue() {
     if (!currentXcut.result) return;
     queueCurrentXcut();
-    toast.success(`Added ${currentXcut.row} × ${currentXcut.col} to the queue`);
+    toast.success(`Added ${currentXcut.row} Ã— ${currentXcut.col} to the queue`);
     setXcutResult(null);
   }
 
@@ -70,7 +70,7 @@ export default function CrossCutsPage() {
         <EmptyState
           title="No schema yet"
           description="Upload + validate a file first."
-          action={<Link href="/upload"><Button>← Go to Upload</Button></Link>}
+          action={<Link href="/upload"><Button>â† Go to Upload</Button></Link>}
         />
       </div>
     );
@@ -83,8 +83,8 @@ export default function CrossCutsPage() {
       <div className="mb-6">
         <h1 className="text-4xl font-black tracking-tight mb-2">Cross cuts</h1>
         <p className="text-ink-400">
-          Build a matrix of two questions. Row categories × column categories. Each cell = # respondents in both.
-          Add matrices to the queue — they'll be written as separate sheets when you Generate.
+          Build a matrix of two questions. Row categories Ã— column categories. Each cell = # respondents in both.
+          Add matrices to the queue â€” they'll be written as separate sheets when you Generate.
         </p>
       </div>
 
@@ -93,10 +93,10 @@ export default function CrossCutsPage() {
           <div>
             <Label>Row question</Label>
             <Select value={currentXcut.row} onChange={(e) => setXcutRow(e.target.value)}>
-              <option value="">Pick a row question…</option>
+              <option value="">Pick a row questionâ€¦</option>
               {questionOptions.map(question => (
                 <option key={"r" + question.column_id} value={question.column_id}>
-                  {question.column_id} — {question.question_text.slice(0, 60)}
+                  {question.column_id} â€” {question.question_text.slice(0, 60)}
                 </option>
               ))}
             </Select>
@@ -104,10 +104,10 @@ export default function CrossCutsPage() {
           <div>
             <Label>Column question</Label>
             <Select value={currentXcut.col} onChange={(e) => setXcutCol(e.target.value)}>
-              <option value="">Pick a column question…</option>
+              <option value="">Pick a column questionâ€¦</option>
               {questionOptions.map(question => (
                 <option key={"c" + question.column_id} value={question.column_id}>
-                  {question.column_id} — {question.question_text.slice(0, 60)}
+                  {question.column_id} â€” {question.question_text.slice(0, 60)}
                 </option>
               ))}
             </Select>
@@ -115,7 +115,7 @@ export default function CrossCutsPage() {
         </div>
         <div className="flex justify-end">
           <Button onClick={compute} disabled={!currentXcut.row || !currentXcut.col || computing}>
-            {computing ? <><Spinner className="w-4 h-4" /> Computing…</> : <><Play className="w-4 h-4" /> Compute</>}
+            {computing ? <><Spinner className="w-4 h-4" /> Computingâ€¦</> : <><Play className="w-4 h-4" /> Compute</>}
           </Button>
         </div>
       </Card>
@@ -132,10 +132,10 @@ export default function CrossCutsPage() {
               <div className="flex items-center gap-2">
                 <Table2 className="w-4 h-4 text-emerald-400" />
                 <h3 className="font-semibold">
-                  {currentXcut.row} × {currentXcut.col}
+                  {currentXcut.row} Ã— {currentXcut.col}
                 </h3>
                 <Badge tone="green">
-                  {currentXcut.result.row_labels.length} × {currentXcut.result.col_labels.length}
+                  {currentXcut.result.row_labels.length} Ã— {currentXcut.result.col_labels.length}
                 </Badge>
               </div>
               <Button onClick={queue}>
@@ -148,7 +148,7 @@ export default function CrossCutsPage() {
                 <table className="w-full text-sm">
                   <thead className="sticky top-0 bg-ink-950/95 backdrop-blur border-b border-white/10 z-10">
                     <tr className="text-left text-ink-400">
-                      <th className="py-2 px-3 font-semibold min-w-[180px] sticky left-0 bg-ink-950/95">↓ Row / Col →</th>
+                      <th className="py-2 px-3 font-semibold min-w-[180px] sticky left-0 bg-ink-950/95">â†“ Row / Col â†’</th>
                       {currentXcut.result.col_labels.map(c => (
                         <th key={c} className="py-2 px-3 font-semibold text-right min-w-[100px]">{c}</th>
                       ))}
@@ -190,9 +190,9 @@ export default function CrossCutsPage() {
                 <Badge tone="bain">{i + 1}</Badge>
                 <div className="flex-1">
                   <span className="font-mono text-sm text-bain-400">{cc.row}</span>
-                  <span className="text-ink-500 mx-2">×</span>
+                  <span className="text-ink-500 mx-2">Ã—</span>
                   <span className="font-mono text-sm text-bain-400">{cc.col}</span>
-                  <span className="text-xs text-ink-500 ml-3">({cc.rowN} × {cc.colN})</span>
+                  <span className="text-xs text-ink-500 ml-3">({cc.rowN} Ã— {cc.colN})</span>
                 </div>
                 <button
                   onClick={() => removeQueuedXcut(i)}

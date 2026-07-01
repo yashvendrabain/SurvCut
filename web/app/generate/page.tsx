@@ -13,7 +13,7 @@ import { WizardProgress } from "@/components/wizard-progress";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { StatTile, EmptyState, Spinner } from "@/components/ui/misc";
+import { StatTile, EmptyState } from "@/components/ui/misc";
 
 export default function GeneratePage() {
   const router = useRouter();

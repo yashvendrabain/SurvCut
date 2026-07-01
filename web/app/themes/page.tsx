@@ -3,8 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
-import { Plus, X, Trash2, Search, Filter, ArrowRight, ArrowLeft, Layers } from "lucide-react";
+import { Plus, Trash2, Search, Filter, ArrowRight, ArrowLeft, Layers } from "lucide-react";
 
 import { useWizardStore } from "@/lib/store";
 import { WizardProgress } from "@/components/wizard-progress";
@@ -21,7 +20,6 @@ export default function ThemesPage() {
   const themeOrder = useWizardStore(s => s.themeOrder);
   const filterQids = useWizardStore(s => s.filterQids);
   const addThemeRow = useWizardStore(s => s.addThemeRow);
-  const renameTheme = useWizardStore(s => s.renameTheme);
   const removeTheme = useWizardStore(s => s.removeTheme);
   const toggleQuestionInTheme = useWizardStore(s => s.toggleQuestionInTheme);
   const toggleFilter = useWizardStore(s => s.toggleFilter);
@@ -31,15 +29,10 @@ export default function ThemesPage() {
   const [selectedTheme, setSelectedTheme] = useState<string>(themeOrder[0] ?? "");
   const [q, setQ] = useState("");
 
-  const questionMap = useMemo(() => {
-    const m: Record<string, typeof schema extends null ? never : NonNullable<typeof schema>["questions"][number]> = {} as any;
-    schema?.questions.forEach(x => { m[x.column_id] = x; });
-    return m;
-  }, [schema]);
-
-  const eligibleQuestions = useMemo(() => {
-    return schema?.questions.filter(x => x.analysis_eligible) ?? [];
-  }, [schema]);
+  const eligibleQuestions = useMemo(
+    () => schema?.questions.filter(x => x.analysis_eligible) ?? [],
+    [schema]
+  );
 
   const assignedQids = useMemo(() => new Set(Object.values(themes).flat()), [themes]);
   const unassigned = eligibleQuestions.filter(x => !assignedQids.has(x.column_id));
@@ -82,7 +75,6 @@ export default function ThemesPage() {
         </p>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 mb-6 border-b border-white/10">
         {(["themes", "filters"] as const).map(t => (
           <button
@@ -102,7 +94,6 @@ export default function ThemesPage() {
 
       {activeTab === "themes" ? (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Theme list */}
           <div className="lg:col-span-1 space-y-3">
             <div>
               <Label>Themes ({themeOrder.length})</Label>
@@ -168,7 +159,7 @@ export default function ThemesPage() {
                 size="sm"
                 onClick={() => { removeTheme(selectedTheme); setSelectedTheme(themeOrder.find(x => x !== selectedTheme) ?? ""); }}
               >
-                <Trash2 className="w-3.5 h-3.5" /> Delete "{selectedTheme}"
+                <Trash2 className="w-3.5 h-3.5" /> Delete &ldquo;{selectedTheme}&rdquo;
               </Button>
             )}
 
@@ -179,10 +170,9 @@ export default function ThemesPage() {
             </Card>
           </div>
 
-          {/* Question picker */}
           <div className="lg:col-span-2">
             <Label>
-              Questions in "{selectedTheme || "…"}" ({themes[selectedTheme]?.length ?? 0})
+              Questions in &ldquo;{selectedTheme || "…"}&rdquo; ({themes[selectedTheme]?.length ?? 0})
             </Label>
             <div className="relative mb-3">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
@@ -222,9 +212,7 @@ export default function ThemesPage() {
                           <span className="font-mono text-xs text-bain-400">{question.column_id}</span>
                           <TypeBadge type={question.question_type} />
                           {inOther && (
-                            <Badge tone="amber">
-                              in another theme
-                            </Badge>
+                            <Badge tone="amber">in another theme</Badge>
                           )}
                         </div>
                         <div className="text-sm text-ink-300 truncate mt-0.5">{question.question_text}</div>

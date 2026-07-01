@@ -1,4 +1,4 @@
-import { HTMLAttributes } from "react";
+import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 const tones = {
@@ -10,8 +10,10 @@ const tones = {
   blue:    "bg-blue-500/10 border-blue-500/30 text-blue-400",
 } as const;
 
+type Tone = keyof typeof tones;
+
 interface Props extends HTMLAttributes<HTMLSpanElement> {
-  tone?: keyof typeof tones;
+  tone?: Tone;
 }
 
 export function Badge({ tone = "neutral", className, ...rest }: Props) {
@@ -30,13 +32,12 @@ export function Badge({ tone = "neutral", className, ...rest }: Props) {
 /** Colour a badge automatically by question_type. */
 export function TypeBadge({ type }: { type: string }) {
   const t = type.toLowerCase();
-  const tone =
+  const tone: Tone =
     t.includes("single") || t.includes("binary") ? "blue" :
     t.includes("multi") ? "amber" :
     t.includes("grid") || t.includes("numeric_alloc") ? "bain" :
     t.includes("rank") ? "green" :
     t.includes("nps") ? "red" :
-    t.includes("open") || t.includes("meta") || t.includes("unknown") ? "neutral" :
     "neutral";
-  return <Badge tone={tone as any}>{type}</Badge>;
+  return <Badge tone={tone}>{type}</Badge>;
 }
