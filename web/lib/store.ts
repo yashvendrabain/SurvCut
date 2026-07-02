@@ -10,6 +10,37 @@ export interface QueuedCrossCut {
   colN: number;
 }
 
+// ── Segmentation: a custom filter built from named groups. Each group is
+// AND-across-conditions; each condition is OR-within-codes. First match wins;
+// unmatched respondents fall into "Others" when includeOthers is set. ──
+export interface SegmentPredicate {
+  op: string;             // = <> > >= < <=
+  value: string;
+}
+export interface SegmentCondition {
+  id: string;
+  column: string;         // any raw-data column
+  predicates: SegmentPredicate[];   // OR'd together
+}
+export interface SegmentGroup {
+  id: string;
+  name: string;
+  conditions: SegmentCondition[];   // AND'd together
+}
+export interface Segment {
+  id: string;
+  name: string;
+  groups: SegmentGroup[];           // priority order
+  includeOthers: boolean;
+  othersLabel: string;
+}
+
+let _uid = 0;
+export function newId(prefix = "id"): string {
+  _uid += 1;
+  return `${prefix}_${_uid}_${Math.floor(Math.random() * 1e6)}`;
+}
+
 interface WizardState {
   // Session
   sessionId: string | null;
@@ -22,6 +53,9 @@ interface WizardState {
 
   // Filter slots: question_ids used in the global filter block
   filterQids: string[];
+
+  // Custom segments (custom filters tagged to every cut & cross-cut)
+  segments: Segment[];
 
   // Cross-cut queue
   queuedCrossCuts: QueuedCrossCut[];
@@ -39,6 +73,9 @@ interface WizardState {
   removeTheme(name: string): void;
   toggleQuestionInTheme(themeName: string, qid: string): void;
   toggleFilter(qid: string): void;
+  addSegment(): string;
+  updateSegment(id: string, patch: Partial<Segment>): void;
+  removeSegment(id: string): void;
   setXcutRow(qid: string): void;
   setXcutCol(qid: string): void;
   setXcutResult(r: CrossCutResponse | null): void;
@@ -54,6 +91,7 @@ export const useWizardStore = create<WizardState>((set, get) => ({
   themes: {},
   themeOrder: [],
   filterQids: [],
+  segments: [],
   queuedCrossCuts: [],
   currentXcut: { row: "", col: "", result: null },
 
@@ -133,6 +171,28 @@ export const useWizardStore = create<WizardState>((set, get) => ({
       : [...state.filterQids, qid].slice(0, 12),
   })),
 
+  addSegment: () => {
+    const id = newId("seg");
+    const n = get().segments.length + 1;
+    const seg: Segment = {
+      id,
+      name: `Segment ${n}`,
+      groups: [{ id: newId("grp"), name: "Option 1", conditions: [] }],
+      includeOthers: true,
+      othersLabel: "Others",
+    };
+    set(state => ({ segments: [...state.segments, seg] }));
+    return id;
+  },
+
+  updateSegment: (id, patch) => set(state => ({
+    segments: state.segments.map(s => (s.id === id ? { ...s, ...patch } : s)),
+  })),
+
+  removeSegment: (id) => set(state => ({
+    segments: state.segments.filter(s => s.id !== id),
+  })),
+
   setXcutRow: (qid) => set(state => ({ currentXcut: { ...state.currentXcut, row: qid, result: null } })),
   setXcutCol: (qid) => set(state => ({ currentXcut: { ...state.currentXcut, col: qid, result: null } })),
   setXcutResult: (r) => set(state => ({ currentXcut: { ...state.currentXcut, result: r } })),
@@ -155,7 +215,7 @@ export const useWizardStore = create<WizardState>((set, get) => ({
 
   reset: () => set({
     sessionId: null, uploadSummary: null, schema: null,
-    themes: {}, themeOrder: [], filterQids: [],
+    themes: {}, themeOrder: [], filterQids: [], segments: [],
     queuedCrossCuts: [], currentXcut: { row: "", col: "", result: null },
   }),
 }));

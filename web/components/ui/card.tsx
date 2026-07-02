@@ -1,13 +1,15 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-export function Card({ className, ...rest }: HTMLAttributes<HTMLDivElement>) {
+interface CardProps extends HTMLAttributes<HTMLDivElement> {
+  /** Add a gentle hover lift for interactive cards. */
+  hover?: boolean;
+}
+
+export function Card({ className, hover = false, ...rest }: CardProps) {
   return (
     <div
-      className={cn(
-        "glass rounded-2xl p-6",
-        className
-      )}
+      className={cn("glass rounded-md p-6", hover && "lift", className)}
       {...rest}
     />
   );
@@ -18,9 +20,9 @@ export function CardHeader({ className, ...rest }: HTMLAttributes<HTMLDivElement
 }
 
 export function CardTitle({ className, ...rest }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h3 className={cn("text-lg font-semibold tracking-tight", className)} {...rest} />;
+  return <h3 className={cn("text-lg font-semibold tracking-tight text-ink-900", className)} {...rest} />;
 }
 
 export function CardDescription({ className, ...rest }: HTMLAttributes<HTMLParagraphElement>) {
-  return <p className={cn("text-sm text-ink-400 mt-1", className)} {...rest} />;
+  return <p className={cn("text-sm text-ink-500 mt-1", className)} {...rest} />;
 }

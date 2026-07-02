@@ -43,13 +43,12 @@ SurvCut/
 │   ├── CUTS_FRAMEWORK.md
 │   ├── QUESTION_TYPES_REFERENCE.md
 │   ├── DATAMAP_SPEC.md
-│   └── SCHEMA.md
+│   ├── SCHEMA.md
+│   └── sample_datamap_and_rawdata.xlsx   # example combined upload
 ├── infra/
 │   └── docker-compose.yml
 ├── .github/workflows/
 │   └── ci.yml
-├── cutter_v2/           # legacy Streamlit / library entry (kept for reference)
-├── cutter_v3/           # legacy Reflex UI (kept for reference)
 └── README.md
 ```
 
@@ -138,9 +137,3 @@ Brings up `redis` (for the future Celery queue), `api` on 8000, `web` on 3000.
 - [`docs/QUESTION_TYPES_REFERENCE.md`](docs/QUESTION_TYPES_REFERENCE.md) — engine internals reference
 - [`docs/DATAMAP_SPEC.md`](docs/DATAMAP_SPEC.md) — required bracketed datamap format
 - [`engine/README.md`](engine/README.md), [`api/README.md`](api/README.md), [`web/README.md`](web/README.md) — per-layer READMEs
-
----
-
-## Legacy
-
-`cutter_v2/` and `cutter_v3/` remain in the tree until feature parity is confirmed. They will be removed when the new stack ships. Everything in them has already been ported to `engine/`.

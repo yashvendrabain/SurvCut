@@ -40,6 +40,10 @@ from .models import (
     ParsedBlock,
     QuestionSpec,
     QuestionType,
+    Segment,
+    SegmentCondition,
+    SegmentGroup,
+    SegmentPredicate,
     SingleCutResult,
     SurveySchema,
     ThemeGroup,
@@ -69,6 +73,7 @@ __all__ = [
     # Contracts
     "ParsedBlock", "QuestionSpec", "QuestionType", "SurveySchema",
     "FilterSlot", "ThemeGroup",
+    "Segment", "SegmentGroup", "SegmentCondition", "SegmentPredicate",
     "SingleCutResult", "CrossCutResult", "CutRow",
     "ValidationReport", "ValidationIssue", "ValidationLevel",
     "METADATA_ALLOWLIST",

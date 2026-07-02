@@ -12,6 +12,11 @@ export interface UploadResponse {
   validation_warnings: string[];
 }
 
+export interface OptionItem {
+  code: string;
+  label: string;
+}
+
 export interface QuestionSummary {
   column_id: string;
   question_text: string;
@@ -20,6 +25,32 @@ export interface QuestionSummary {
   n_sub_columns: number;
   is_demographic: boolean;
   analysis_eligible: boolean;
+  options: OptionItem[];
+}
+
+export interface SegmentPredicatePayload {
+  op: string;      // = <> > >= < <=
+  value: string;
+}
+export interface SegmentConditionPayload {
+  column: string;
+  predicates: SegmentPredicatePayload[];   // OR within
+}
+export interface SegmentGroupPayload {
+  name: string;
+  conditions: SegmentConditionPayload[];    // AND across
+}
+export interface SegmentPayload {
+  name: string;
+  groups: SegmentGroupPayload[];
+  include_others: boolean;
+  others_label?: string;
+}
+
+export interface RawColumn {
+  name: string;
+  numeric: boolean;
+  options: OptionItem[];
 }
 
 export interface SchemaResponse {
@@ -27,6 +58,7 @@ export interface SchemaResponse {
   analysis_eligible: number;
   total_respondents: number;
   questions: QuestionSummary[];
+  raw_columns: RawColumn[];
 }
 
 export interface CrossCutResponse {
@@ -72,7 +104,8 @@ export async function buildWorkbook(
   themeNames: string[],
   themeQuestionIds: string[][],
   filterColumnIds: string[],
-  queuedCrossCuts: Array<{ row_qid: string; col_qid: string }>
+  queuedCrossCuts: Array<{ row_qid: string; col_qid: string }>,
+  segments: SegmentPayload[] = []
 ): Promise<BuildResponse> {
   const r = await fetch(`${BASE}/api/export/build`, {
     method: "POST",
@@ -83,6 +116,7 @@ export async function buildWorkbook(
       theme_question_ids: themeQuestionIds,
       filter_column_ids: filterColumnIds,
       queued_cross_cuts: queuedCrossCuts,
+      segments,
     }),
   });
   if (!r.ok) throw new Error(await r.text());
@@ -91,4 +125,30 @@ export async function buildWorkbook(
 
 export function downloadUrl(sessionId: string): string {
   return `${BASE}/api/export/download/${sessionId}`;
+}
+
+export interface CutRowData {
+  label: string;
+  count: number;
+  pct: number;
+}
+export interface CutData {
+  column_id: string;
+  question_text: string;
+  question_type: string;
+  valid_n: number;
+  headline_metric: string;
+  value_is_mean: boolean;
+  rows: CutRowData[];
+}
+
+export async function getCuts(sessionId: string, columnIds: string[] = []): Promise<CutData[]> {
+  const r = await fetch(`${BASE}/api/cuts/compute`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: sessionId, column_ids: columnIds }),
+  });
+  if (!r.ok) throw new Error(await r.text());
+  const j = await r.json();
+  return j.cuts as CutData[];
 }

@@ -13,6 +13,10 @@ from typing import Any
 from cutter_engine import (
     ExportInputs,
     FilterSlot,
+    Segment,
+    SegmentCondition,
+    SegmentGroup,
+    SegmentPredicate,
     ThemeGroup,
     compute_cross_cut,
     export,
@@ -57,11 +61,36 @@ async def build_workbook(
         if cc.row_labels and cc.col_labels:
             cross_cuts.append(cc)
 
+    # Build segment domain objects (custom filters materialised as helper columns)
+    segments = [
+        Segment(
+            name=s.name,
+            include_others=s.include_others,
+            others_label=s.others_label,
+            groups=[
+                SegmentGroup(
+                    name=g.name,
+                    conditions=[
+                        SegmentCondition(
+                            column=c.column,
+                            predicates=[SegmentPredicate(op=p.op, value=p.value)
+                                        for p in c.predicates],
+                        )
+                        for c in g.conditions
+                    ],
+                )
+                for g in s.groups
+            ],
+        )
+        for s in req.segments
+    ]
+
     out_path = os.path.join(tempfile.gettempdir(),
                             f"cutter_api_{req.session_id[:8]}.xlsx")
     inputs = ExportInputs(
         schema=schema, raw_df=raw_df, datamap_rows=datamap_rows,
         themes=themes, filters=filters, cross_cuts=tuple(cross_cuts),
+        segments=segments,
     )
     path = export(inputs, out_path)
     size = os.path.getsize(path)

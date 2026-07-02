@@ -13,20 +13,32 @@ export function StatTile({ label, value, tone = "neutral" }: {
   tone?: "neutral" | "bain" | "green" | "amber";
 }) {
   const toneClasses = {
-    neutral: "border-white/10",
-    bain: "border-bain-500/40",
-    green: "border-emerald-500/40",
-    amber: "border-amber-500/40",
+    neutral: "border-ink-200",
+    bain: "border-bain-200",
+    green: "border-emerald-200",
+    amber: "border-amber-200",
+  };
+  const accent = {
+    neutral: "text-ink-900",
+    bain: "text-bain-600",
+    green: "text-emerald-600",
+    amber: "text-amber-600",
   };
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4 }}
-      className={cn("glass rounded-xl p-4 border", toneClasses[tone])}
+      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      onMouseMove={(e) => {
+        const el = e.currentTarget as HTMLElement;
+        const r = el.getBoundingClientRect();
+        el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+        el.style.setProperty("--my", `${e.clientY - r.top}px`);
+      }}
+      className={cn("glass lift spotlight rounded-md p-4 border", toneClasses[tone])}
     >
-      <div className="text-xs uppercase tracking-wider text-ink-400 mb-1 font-semibold">{label}</div>
-      <div className="text-3xl font-black tracking-tight text-white">{value}</div>
+      <div className="text-xs uppercase tracking-wider text-ink-500 mb-1 font-semibold">{label}</div>
+      <div className={cn("text-3xl font-black tracking-tight", accent[tone])}>{value}</div>
     </motion.div>
   );
 }
@@ -37,9 +49,9 @@ export function EmptyState({ title, description, action }: {
   action?: React.ReactNode;
 }) {
   return (
-    <div className="glass rounded-2xl p-12 text-center">
-      <h3 className="text-lg font-semibold mb-2">{title}</h3>
-      <p className="text-sm text-ink-400 mb-6 max-w-md mx-auto">{description}</p>
+    <div className="glass rounded-md p-12 text-center animate-fade-in-up">
+      <h3 className="text-lg font-semibold text-ink-900 mb-2">{title}</h3>
+      <p className="text-sm text-ink-500 mb-6 max-w-md mx-auto">{description}</p>
       {action}
     </div>
   );

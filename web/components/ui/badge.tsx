@@ -2,12 +2,12 @@ import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
 const tones = {
-  neutral: "bg-white/5 border-white/10 text-ink-300",
-  bain:    "bg-bain-500/10 border-bain-500/30 text-bain-400",
-  green:   "bg-emerald-500/10 border-emerald-500/30 text-emerald-400",
-  amber:   "bg-amber-500/10 border-amber-500/30 text-amber-400",
-  red:     "bg-red-500/10 border-red-500/30 text-red-400",
-  blue:    "bg-blue-500/10 border-blue-500/30 text-blue-400",
+  neutral: "bg-ink-100 border-ink-200 text-ink-600",
+  bain:    "bg-bain-50 border-bain-200 text-bain-700",
+  green:   "bg-emerald-50 border-emerald-200 text-emerald-700",
+  amber:   "bg-amber-50 border-amber-200 text-amber-700",
+  red:     "bg-red-50 border-red-200 text-red-700",
+  blue:    "bg-sky-50 border-sky-200 text-sky-700",
 } as const;
 
 type Tone = keyof typeof tones;
