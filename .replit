@@ -1,0 +1,21 @@
+# Replit config — runs the full SurvCut stack (FastAPI backend + Next.js frontend)
+# in one container. Next.js is public on port 3000 and proxies /api/* to the
+# internal FastAPI on 127.0.0.1:8000 (see web/next.config.ts).
+modules = ["python-3.11", "nodejs-20"]
+run = "bash start.sh"
+
+[env]
+NEXT_TELEMETRY_DISABLED = "1"
+# Give the Next.js build/runtime a bit more headroom.
+NODE_OPTIONS = "--max-old-space-size=1024"
+
+# Expose the Next.js port as the public web port.
+[[ports]]
+localPort = 3000
+externalPort = 80
+
+# For a persistent shareable URL, use a Reserved VM deployment (stateful,
+# always-on) — this app keeps sessions in memory + runs two processes, so
+# Autoscale is not suitable.
+[deployment]
+run = ["bash", "start.sh"]
