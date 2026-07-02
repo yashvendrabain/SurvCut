@@ -10,8 +10,7 @@ import { toast } from "sonner";
 import { getSchema } from "@/lib/api-client";
 import { useWizardStore } from "@/lib/store";
 import { WizardProgress } from "@/components/wizard-progress";
-import { Card } from "@/components/ui/card";
-import { Input, Select, Label } from "@/components/ui/input";
+import { Input, Select } from "@/components/ui/input";
 import { Badge, TypeBadge } from "@/components/ui/badge";
 import { StatTile, Spinner, EmptyState } from "@/components/ui/misc";
 import { Button } from "@/components/ui/button";
@@ -60,7 +59,7 @@ export default function ValidatePage() {
         <EmptyState
           title="No session yet"
           description="Upload a file first to see the parsed schema."
-          action={<Link href="/upload"><Button>← Go to Upload</Button></Link>}
+          action={<Link href="/upload"><Button><ArrowLeft className="w-4 h-4" /> Go to Upload</Button></Link>}
         />
       </div>
     );
@@ -70,8 +69,8 @@ export default function ValidatePage() {
     return (
       <div>
         <WizardProgress />
-        <div className="flex items-center gap-3 text-ink-400">
-          <Spinner className="w-5 h-5" />
+        <div className="flex items-center gap-3 text-ink-500">
+          <Spinner className="w-5 h-5 text-bain-500" />
           <span>Loading schema…</span>
         </div>
       </div>
@@ -82,9 +81,9 @@ export default function ValidatePage() {
     <div>
       <WizardProgress />
 
-      <div className="mb-6">
-        <h1 className="text-4xl font-black tracking-tight mb-2">Validate schema</h1>
-        <p className="text-ink-400">
+      <div className="mb-6 animate-fade-in-up">
+        <h1 className="font-display text-4xl font-black tracking-tight mb-2 text-ink-900">Validate schema</h1>
+        <p className="text-ink-500">
           Every question the datamap declared, with its detected type. Anything <em>not</em> eligible for cuts is flagged.
         </p>
       </div>
@@ -99,7 +98,7 @@ export default function ValidatePage() {
       <div className="flex flex-wrap gap-3 mb-4">
         <div className="flex-1 min-w-[240px]">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
             <Input
               placeholder="Search by ID or text…"
               value={q}
@@ -114,10 +113,10 @@ export default function ValidatePage() {
         </Select>
         <button
           onClick={() => setEligibleOnly(v => !v)}
-          className={`px-4 py-2 rounded-md text-sm font-semibold border transition-colors ${
+          className={`px-4 py-2.5 rounded-xl text-sm font-semibold border transition-all duration-200 ${
             eligibleOnly
-              ? "bg-emerald-500/10 border-emerald-500/40 text-emerald-400"
-              : "bg-white/5 border-white/10 text-ink-300 hover:bg-white/10"
+              ? "bg-emerald-50 border-emerald-200 text-emerald-700 shadow-soft"
+              : "bg-white border-ink-200 text-ink-600 hover:bg-ink-50 shadow-soft"
           }`}
         >
           Eligible only
@@ -125,14 +124,15 @@ export default function ValidatePage() {
       </div>
 
       <motion.div
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        initial={{ opacity: 0, y: 8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="glass rounded-2xl overflow-hidden"
       >
         <div className="max-h-[520px] overflow-y-auto">
           <table className="w-full text-sm">
-            <thead className="sticky top-0 bg-ink-950/95 backdrop-blur border-b border-white/10">
-              <tr className="text-left text-ink-400">
+            <thead className="sticky top-0 glass-solid border-b border-ink-200 z-10">
+              <tr className="text-left text-ink-500">
                 <th className="py-3 px-4 font-semibold">Column ID</th>
                 <th className="py-3 px-4 font-semibold">Question text</th>
                 <th className="py-3 px-4 font-semibold">Type</th>
@@ -143,14 +143,14 @@ export default function ValidatePage() {
             </thead>
             <tbody>
               {filtered.map((question) => (
-                <tr key={question.column_id} className="border-b border-white/5 hover:bg-white/[0.02]">
-                  <td className="py-2 px-4 font-mono text-xs text-bain-400">{question.column_id}</td>
-                  <td className="py-2 px-4 text-ink-200 max-w-xs truncate" title={question.question_text}>
+                <tr key={question.column_id} className="border-b border-ink-100 hover:bg-ink-50/70 transition-colors">
+                  <td className="py-2 px-4 font-mono text-xs text-bain-600">{question.column_id}</td>
+                  <td className="py-2 px-4 text-ink-800 max-w-xs truncate" title={question.question_text}>
                     {question.question_text}
                   </td>
                   <td className="py-2 px-4"><TypeBadge type={question.question_type} /></td>
-                  <td className="py-2 px-4 text-right font-mono text-ink-400">{question.n_options || "—"}</td>
-                  <td className="py-2 px-4 text-right font-mono text-ink-400">{question.n_sub_columns > 1 ? question.n_sub_columns : "—"}</td>
+                  <td className="py-2 px-4 text-right font-mono text-ink-500">{question.n_options || "—"}</td>
+                  <td className="py-2 px-4 text-right font-mono text-ink-500">{question.n_sub_columns > 1 ? question.n_sub_columns : "—"}</td>
                   <td className="py-2 px-4 text-center">
                     {question.analysis_eligible ? (
                       <Badge tone="green">✓</Badge>
@@ -163,12 +163,12 @@ export default function ValidatePage() {
             </tbody>
           </table>
           {filtered.length === 0 && (
-            <div className="py-12 text-center text-ink-500 text-sm">No questions match those filters.</div>
+            <div className="py-12 text-center text-ink-400 text-sm">No questions match those filters.</div>
           )}
         </div>
       </motion.div>
 
-      <div className="mt-4 text-sm text-ink-500">
+      <div className="mt-4 text-sm text-ink-400">
         Showing {filtered.length} of {schema.total_questions} questions
       </div>
 
@@ -176,8 +176,8 @@ export default function ValidatePage() {
         <Button variant="ghost" onClick={() => router.push("/upload")}>
           <ArrowLeft className="w-4 h-4" /> Back
         </Button>
-        <Button onClick={() => router.push("/themes")}>
-          Continue to Themes <ArrowRight className="w-4 h-4" />
+        <Button onClick={() => router.push("/filters-segments")}>
+          Continue to Filters &amp; segments <ArrowRight className="w-4 h-4" />
         </Button>
       </div>
     </div>

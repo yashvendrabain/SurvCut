@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .deps import _SESSIONS
-from .routers import crosscuts, export, schema_, upload
+from .routers import crosscuts, cuts, export, schema_, upload
 
 
 @asynccontextmanager
@@ -34,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(upload.router, prefix="/api/upload", tags=["upload"])
     app.include_router(schema_.router, prefix="/api/schema", tags=["schema"])
     app.include_router(crosscuts.router, prefix="/api/crosscuts", tags=["crosscuts"])
+    app.include_router(cuts.router, prefix="/api/cuts", tags=["cuts"])
     app.include_router(export.router, prefix="/api/export", tags=["export"])
 
     @app.get("/ping", tags=["health"])

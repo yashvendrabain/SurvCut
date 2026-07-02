@@ -184,3 +184,44 @@ class ThemeGroup:
     """One theme = one output sheet."""
     name: str                                     # sheet name (≤31 chars)
     question_column_ids: list[str] = field(default_factory=list)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Segmentation — a custom categorical filter (e.g. WLO = Winners/Laggards/Others)
+# built from AND-across-questions, OR-within-options conditions. Materialised as
+# a live helper column that labels each respondent with their group name, then
+# exposed as a Global Filter tagged to every cut and cross-cut.
+# ─────────────────────────────────────────────────────────────────────────────
+@dataclass(slots=True)
+class SegmentPredicate:
+    """One OR-clause of a condition: ``<column> <op> <value>``.
+    `op` is one of ``= <> > >= < <=``. For discrete option ticks it is ``=``."""
+    op: str
+    value: Any
+
+
+@dataclass(slots=True)
+class SegmentCondition:
+    """A condition on one raw-data column. The respondent's value in `column`
+    must satisfy ANY of `predicates` (OR within). Conditions are AND-ed inside a
+    group. `column` is a raw-data column header (options or free numeric)."""
+    column: str
+    predicates: list[SegmentPredicate] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class SegmentGroup:
+    """One named option of a segment. Conditions are combined with AND."""
+    name: str
+    conditions: list[SegmentCondition] = field(default_factory=list)
+
+
+@dataclass(slots=True)
+class Segment:
+    """A named custom filter. `groups` are evaluated in priority order (first
+    match wins); when `include_others` is set, unmatched respondents fall into a
+    final "Others" group."""
+    name: str
+    groups: list[SegmentGroup] = field(default_factory=list)
+    include_others: bool = True
+    others_label: str = "Others"

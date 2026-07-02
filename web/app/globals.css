@@ -4,42 +4,157 @@
 
 @layer base {
   html {
-    color-scheme: dark;
+    color-scheme: light;
+    scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   body {
-    background: theme("colors.ink.950");
-    color: theme("colors.ink.100");
-    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    /* Bain.com — crisp white canvas, red the single accent */
+    background-color: #ffffff;
+    color: theme("colors.ink.900");
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11", "ss01";
   }
 
   ::selection {
     background: theme("colors.bain.500");
     color: white;
   }
+
+  /* Keep native dropdown option lists legible everywhere:
+     dark ink on white regardless of the control's own text colour. */
+  option {
+    background-color: #ffffff;
+    color: theme("colors.ink.900");
+  }
+
+  /* Refined, unobtrusive scrollbars */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(15, 23, 42, 0.22) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: rgba(15, 23, 42, 0.18);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: rgba(15, 23, 42, 0.32);
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
 }
 
 @layer components {
+  /* Flat editorial white panel — crisp border, minimal shadow (Bain card) */
   .glass {
-    background: rgba(24, 24, 27, 0.6);
-    backdrop-filter: blur(12px);
-    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: #ffffff;
+    border: 1px solid theme("colors.ink.200");
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+  }
+
+  /* Opaque variant for sticky headers / overlays above scrolling content */
+  .glass-solid {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  /* Restrained hover for interactive cards — subtle lift + red-tinted glow */
+  .lift {
+    transition: border-color 0.25s ease, box-shadow 0.25s ease, transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .lift:hover {
+    transform: translateY(-3px);
+    border-color: rgba(204, 0, 0, 0.28);
+    box-shadow: 0 16px 34px -20px rgba(204, 0, 0, 0.30), 0 6px 16px -12px rgba(15, 23, 42, 0.22);
+  }
+
+  /* Cursor-following spotlight glow (see GlowCard). --mx/--my set on mousemove.
+     The ::before paints behind the element's content naturally, so absolutely
+     positioned children (e.g. a top accent bar) still render above it. */
+  .spotlight { position: relative; }
+  .spotlight::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: radial-gradient(260px circle at var(--mx, 50%) var(--my, 50%), rgba(204, 0, 0, 0.10), transparent 62%);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  }
+  .spotlight:hover::before { opacity: 1; }
+
+  /* Hover glow utility for any element */
+  .glow-hover { transition: box-shadow 0.25s ease, transform 0.25s ease; }
+  .glow-hover:hover { box-shadow: 0 10px 30px -10px rgba(204, 0, 0, 0.45); }
+
+  /* Animated left-to-right underline (links) */
+  .link-underline { position: relative; }
+  .link-underline::after {
+    content: "";
+    position: absolute;
+    left: 0; bottom: -3px;
+    height: 2px; width: 100%;
+    background: theme("colors.bain.500");
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .link-underline:hover::after { transform: scaleX(1); }
+
+  /* Uppercase red eyebrow label — a Bain editorial signature */
+  .eyebrow {
+    @apply inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.18em] text-bain-600;
+  }
+
+  /* Short red accent rule under headings */
+  .rule-red {
+    @apply block h-[3px] w-12 bg-bain-500;
   }
 
   .btn-bain {
-    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-lg
-           bg-bain-500 hover:bg-bain-600 active:bg-bain-700
+    @apply relative overflow-hidden inline-flex items-center justify-center px-5 py-2.5 rounded-md
+           bg-bain-500 hover:bg-bain-600 active:bg-bain-700 active:scale-[0.98]
            text-white font-semibold text-sm
-           transition-all duration-150
-           shadow-lg shadow-bain-500/20 hover:shadow-bain-500/40;
+           transition-all duration-200
+           hover:shadow-[0_10px_30px_-8px_rgba(204,0,0,0.55)];
   }
+  /* glossy sheen sweep on hover */
+  .btn-bain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(120deg, transparent 32%, rgba(255, 255, 255, 0.28) 50%, transparent 68%);
+    transform: translateX(-130%);
+    transition: transform 0.6s ease;
+  }
+  .btn-bain:hover::after { transform: translateX(130%); }
 
   .btn-ghost {
-    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-lg
-           bg-white/5 hover:bg-white/10 border border-white/10
-           text-ink-100 font-semibold text-sm
-           transition-all duration-150;
+    @apply inline-flex items-center justify-center px-5 py-2.5 rounded-md
+           bg-white hover:bg-ink-50 border border-ink-300 hover:border-ink-400
+           text-ink-800 font-semibold text-sm
+           transition-all duration-200 active:scale-[0.98];
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
   }
 }

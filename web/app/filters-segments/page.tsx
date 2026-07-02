@@ -3,29 +3,37 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Plus, Trash2, Search, Filter, ArrowRight, ArrowLeft, Layers } from "lucide-react";
+import { Plus, Trash2, Search, Filter, ArrowRight, ArrowLeft, Layers, Boxes } from "lucide-react";
 
 import { useWizardStore } from "@/lib/store";
 import { WizardProgress } from "@/components/wizard-progress";
+import { SegmentBuilder } from "@/components/segment-builder";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Label } from "@/components/ui/input";
 import { Badge, TypeBadge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/misc";
 
-export default function ThemesPage() {
+const TABS = [
+  { key: "themes", label: "Theme sheets", icon: Layers },
+  { key: "filters", label: "Filters", icon: Filter },
+  { key: "segments", label: "Segments", icon: Boxes },
+] as const;
+
+export default function FiltersSegmentsPage() {
   const router = useRouter();
   const schema = useWizardStore(s => s.schema);
   const themes = useWizardStore(s => s.themes);
   const themeOrder = useWizardStore(s => s.themeOrder);
   const filterQids = useWizardStore(s => s.filterQids);
   const addThemeRow = useWizardStore(s => s.addThemeRow);
+  const renameTheme = useWizardStore(s => s.renameTheme);
   const removeTheme = useWizardStore(s => s.removeTheme);
   const toggleQuestionInTheme = useWizardStore(s => s.toggleQuestionInTheme);
   const toggleFilter = useWizardStore(s => s.toggleFilter);
 
   const [newThemeName, setNewThemeName] = useState("");
-  const [activeTab, setActiveTab] = useState<"themes" | "filters">("themes");
+  const [activeTab, setActiveTab] = useState<"themes" | "filters" | "segments">("themes");
   const [selectedTheme, setSelectedTheme] = useState<string>(themeOrder[0] ?? "");
   const [q, setQ] = useState("");
 
@@ -58,7 +66,7 @@ export default function ThemesPage() {
         <EmptyState
           title="No schema yet"
           description="Upload + validate a file first."
-          action={<Link href="/upload"><Button>← Go to Upload</Button></Link>}
+          action={<Link href="/upload"><Button><ArrowLeft className="w-4 h-4" /> Go to Upload</Button></Link>}
         />
       </div>
     );
@@ -68,26 +76,26 @@ export default function ThemesPage() {
     <div>
       <WizardProgress />
 
-      <div className="mb-6">
-        <h1 className="text-4xl font-black tracking-tight mb-2">Themes & filters</h1>
-        <p className="text-ink-400">
-          Group questions into theme sheets, and pick which questions become global filter dropdowns.
+      <div className="mb-6 animate-fade-in-up">
+        <h1 className="font-display text-4xl font-black tracking-tight mb-2 text-ink-900">Filters and segments</h1>
+        <p className="text-ink-500">
+          Group questions into theme sheets and choose which become global filter dropdowns. Segmentation lands here next.
         </p>
       </div>
 
-      <div className="flex gap-1 mb-6 border-b border-white/10">
-        {(["themes", "filters"] as const).map(t => (
+      <div className="flex gap-1 mb-6 border-b border-ink-200">
+        {TABS.map(({ key, label, icon: Icon }) => (
           <button
-            key={t}
-            onClick={() => setActiveTab(t)}
-            className={`px-4 py-2.5 text-sm font-semibold capitalize border-b-2 -mb-px transition-colors ${
-              activeTab === t
-                ? "border-bain-500 text-white"
-                : "border-transparent text-ink-400 hover:text-ink-200"
+            key={key}
+            onClick={() => setActiveTab(key)}
+            className={`px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors ${
+              activeTab === key
+                ? "border-bain-500 text-bain-700"
+                : "border-transparent text-ink-500 hover:text-ink-900"
             }`}
           >
-            {t === "themes" ? <Layers className="w-4 h-4 inline mr-1.5" /> : <Filter className="w-4 h-4 inline mr-1.5" />}
-            {t}
+            <Icon className="w-4 h-4 inline mr-1.5" />
+            {label}
           </button>
         ))}
       </div>
@@ -105,14 +113,14 @@ export default function ThemesPage() {
                     <button
                       key={name}
                       onClick={() => setSelectedTheme(name)}
-                      className={`w-full text-left p-3 rounded-lg border transition-all ${
+                      className={`w-full text-left p-3 rounded-xl border transition-all duration-200 ${
                         active
-                          ? "bg-bain-500/10 border-bain-500/40"
-                          : "bg-white/[0.02] border-white/10 hover:bg-white/[0.05]"
+                          ? "bg-bain-50 border-bain-200 shadow-soft"
+                          : "bg-white border-ink-200 hover:bg-ink-50 hover:-translate-y-0.5 shadow-soft"
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className={`text-sm font-semibold truncate ${active ? "text-white" : "text-ink-200"}`}>
+                        <span className={`text-sm font-semibold truncate ${active ? "text-bain-700" : "text-ink-800"}`}>
                           {name}
                         </span>
                         <Badge tone={count === 0 ? "neutral" : "green"}>{count}</Badge>
@@ -124,10 +132,10 @@ export default function ThemesPage() {
             </div>
 
             <div>
-              <Label>Add new theme</Label>
+              <Label>Add or rename a theme</Label>
               <div className="flex gap-2">
                 <Input
-                  placeholder="e.g. Growth Ambition"
+                  placeholder={selectedTheme ? `Rename “${selectedTheme}” or add new…` : "e.g. Growth Ambition"}
                   value={newThemeName}
                   onChange={(e) => setNewThemeName(e.target.value)}
                   onKeyDown={(e) => {
@@ -140,6 +148,7 @@ export default function ThemesPage() {
                 />
                 <Button
                   size="md"
+                  title="Add as new theme"
                   onClick={() => {
                     if (newThemeName.trim()) {
                       addThemeRow(newThemeName.trim());
@@ -150,7 +159,29 @@ export default function ThemesPage() {
                 >
                   <Plus className="w-4 h-4" />
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  title="Rename the selected theme"
+                  disabled={!selectedTheme || !newThemeName.trim() || newThemeName.trim() === selectedTheme}
+                  onClick={() => {
+                    const next = newThemeName.trim();
+                    if (selectedTheme && next) {
+                      renameTheme(selectedTheme, next);
+                      setSelectedTheme(next);
+                      setNewThemeName("");
+                    }
+                  }}
+                >
+                  Update
+                </Button>
               </div>
+              {selectedTheme && (
+                <p className="text-xs text-ink-400 mt-1.5">
+                  <strong className="text-ink-600">Update</strong> renames the selected theme
+                  “{selectedTheme}”. Question assignments save automatically as you tick them.
+                </p>
+              )}
             </div>
 
             {selectedTheme && (
@@ -163,9 +194,9 @@ export default function ThemesPage() {
               </Button>
             )}
 
-            <Card className="p-4 border-amber-500/20">
-              <div className="text-xs text-ink-400">
-                <strong className="text-amber-400">Unassigned:</strong> {unassigned.length} questions not in any theme.
+            <Card className="p-4 border-amber-200">
+              <div className="text-xs text-ink-600">
+                <strong className="text-amber-600">Unassigned:</strong> {unassigned.length} questions not in any theme.
               </div>
             </Card>
           </div>
@@ -175,7 +206,7 @@ export default function ThemesPage() {
               Questions in &ldquo;{selectedTheme || "…"}&rdquo; ({themes[selectedTheme]?.length ?? 0})
             </Label>
             <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-500" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-ink-400" />
               <Input
                 placeholder="Search all eligible questions…"
                 value={q}
@@ -194,45 +225,45 @@ export default function ThemesPage() {
                       key={question.column_id}
                       onClick={() => selectedTheme && toggleQuestionInTheme(selectedTheme, question.column_id)}
                       disabled={!selectedTheme}
-                      className={`w-full text-left px-4 py-2.5 border-b border-white/5 flex items-center gap-3 transition-colors ${
+                      className={`w-full text-left px-4 py-2.5 border-b border-ink-100 flex items-center gap-3 transition-colors ${
                         inCurrent
-                          ? "bg-bain-500/10 hover:bg-bain-500/15"
+                          ? "bg-bain-50 hover:bg-bain-100"
                           : inOther
-                            ? "bg-white/[0.01] opacity-50"
-                            : "hover:bg-white/[0.03]"
+                            ? "bg-ink-50/50 opacity-60"
+                            : "hover:bg-ink-50/70"
                       }`}
                     >
-                      <div className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
-                        inCurrent ? "bg-bain-500 border-bain-500" : "border-white/20"
+                      <div className={`flex-shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                        inCurrent ? "bg-bain-500 border-bain-500" : "border-ink-300 bg-white"
                       }`}>
                         {inCurrent && <span className="text-white text-xs font-bold">✓</span>}
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs text-bain-400">{question.column_id}</span>
+                          <span className="font-mono text-xs text-bain-600">{question.column_id}</span>
                           <TypeBadge type={question.question_type} />
                           {inOther && (
                             <Badge tone="amber">in another theme</Badge>
                           )}
                         </div>
-                        <div className="text-sm text-ink-300 truncate mt-0.5">{question.question_text}</div>
+                        <div className="text-sm text-ink-600 truncate mt-0.5">{question.question_text}</div>
                       </div>
                     </button>
                   );
                 })}
                 {filteredQuestions.length === 0 && (
-                  <div className="py-8 text-center text-ink-500 text-sm">No matches.</div>
+                  <div className="py-8 text-center text-ink-400 text-sm">No matches.</div>
                 )}
               </div>
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeTab === "filters" ? (
         <div>
           <div className="mb-4">
-            <p className="text-sm text-ink-400 max-w-2xl">
+            <p className="text-sm text-ink-500 max-w-2xl">
               Pick up to 12 single-select questions to expose as global filter dropdowns on every theme sheet.
-              These become the <code className="text-bain-400">Region / Industry / Sector</code>-style filters at the top of each cut sheet.
+              These become the <code className="text-bain-600 font-mono bg-bain-50 px-1.5 py-0.5 rounded">Region / Industry / Sector</code>-style filters at the top of each cut sheet.
             </p>
           </div>
 
@@ -250,34 +281,36 @@ export default function ThemesPage() {
                   <button
                     key={question.column_id}
                     onClick={() => toggleFilter(question.column_id)}
-                    className={`w-full text-left px-4 py-2.5 border-b border-white/5 flex items-center gap-3 transition-colors ${
-                      on ? "bg-bain-500/10 hover:bg-bain-500/15" : "hover:bg-white/[0.03]"
+                    className={`w-full text-left px-4 py-2.5 border-b border-ink-100 flex items-center gap-3 transition-colors ${
+                      on ? "bg-bain-50 hover:bg-bain-100" : "hover:bg-ink-50/70"
                     }`}
                   >
-                    <div className={`flex-shrink-0 w-5 h-5 rounded border-2 flex items-center justify-center ${
-                      on ? "bg-bain-500 border-bain-500" : "border-white/20"
+                    <div className={`flex-shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
+                      on ? "bg-bain-500 border-bain-500" : "border-ink-300 bg-white"
                     }`}>
                       {on && <span className="text-white text-xs font-bold">✓</span>}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-mono text-xs text-bain-400">{question.column_id}</span>
+                        <span className="font-mono text-xs text-bain-600">{question.column_id}</span>
                         <Badge tone="neutral">{question.n_options} options</Badge>
                         {question.is_demographic && <Badge tone="blue">demographic</Badge>}
                       </div>
-                      <div className="text-sm text-ink-300 truncate mt-0.5">{question.question_text}</div>
+                      <div className="text-sm text-ink-600 truncate mt-0.5">{question.question_text}</div>
                     </div>
                   </button>
                 );
               })}
               {singleSelects.length === 0 && (
-                <div className="py-8 text-center text-ink-500 text-sm">
+                <div className="py-8 text-center text-ink-400 text-sm">
                   No single-select questions with option lists to use as filters.
                 </div>
               )}
             </div>
           </div>
         </div>
+      ) : (
+        <SegmentBuilder />
       )}
 
       <div className="flex justify-between items-center mt-8">
