@@ -40,6 +40,7 @@ from typing import Any
 import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.formatting.rule import ColorScaleRule
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.datavalidation import DataValidation
 
@@ -94,23 +95,31 @@ _FILL_AMBER = PatternFill("solid", fgColor=_AMBER_FILL)
 # Borders --------------------------------------------------------------------
 _SIDE = Side(style="thin", color=_GRAY_CODE_FILL)
 _BORDER = Border(left=_SIDE, right=_SIDE, top=_SIDE, bottom=_SIDE)
-# Table framing: thick black outer edge, light-gray thin inner gridlines.
+# Cell gridlines: medium-black on the grey boxes, thin-black on every data cell
+# (so every cut renders as a complete, fully-bordered grid).
 _SIDE_OUTER = Side(style="medium", color=_BLACK)
-_SIDE_INNER = Side(style="thin", color=_GRAY_CODE_FILL)
+_SIDE_INNER = Side(style="thin", color=_BLACK)
 
 
-def _table_border(ws, top: int, left: int, bottom: int, right: int) -> None:
-    """Frame a rectangular table: medium black outer border, thin gray inner
-    gridlines. Applied consistently to the filter panel and every cut block."""
+def _table_border(ws, top: int, left: int, bottom: int, right: int,
+                  dividers: tuple[int, ...] = ()) -> None:
+    """Frame a cut table like a hand-bordered spreadsheet grid:
+      * medium (thick) black border around the whole rectangle,
+      * thin-black inner gridlines between every cell,
+      * an extra medium (thick) vertical divider to the RIGHT of each column in
+        `dividers` (e.g. between the # and % blocks — its left/right both thick).
+    Only this rectangle is touched, so nothing outside the table is bordered."""
     if bottom < top or right < left:
         return
+    thin, thick = _SIDE_INNER, _SIDE_OUTER
+    divs = set(dividers)
     for r in range(top, bottom + 1):
         for c in range(left, right + 1):
             ws.cell(row=r, column=c).border = Border(
-                top=_SIDE_OUTER if r == top else _SIDE_INNER,
-                bottom=_SIDE_OUTER if r == bottom else _SIDE_INNER,
-                left=_SIDE_OUTER if c == left else _SIDE_INNER,
-                right=_SIDE_OUTER if c == right else _SIDE_INNER,
+                top=thick if r == top else thin,
+                bottom=thick if r == bottom else thin,
+                left=thick if (c == left or (c - 1) in divs) else thin,
+                right=thick if (c == right or c in divs) else thin,
             )
 
 
@@ -179,6 +188,14 @@ class ExportInputs:
 
 _CROSS_CUTS_SHEET = "Cross-cuts"
 
+# Max global-filter slots rendered per sheet. Raised well above the old 12 —
+# the filter block is a vertical list, so cuts simply start a few rows lower.
+_MAX_FILTERS = 40
+
+# How far the grey question-header banner spans. Column ZA (677) so the banner
+# runs full-width and never looks "cut off" beside a wide grid / matrix table.
+_HEADER_SPAN_COL = 677  # ZA
+
 
 def export(inputs: ExportInputs, output_path: str | Path) -> Path:
     """Build the workbook and write to `output_path`. Returns the path."""
@@ -192,8 +209,8 @@ def export(inputs: ExportInputs, output_path: str | Path) -> Path:
     raw_sheet_name = "Raw data"
     n_raw = len(inputs.raw_df)
     raw_col_to_letter = _build_raw_data_sheet(wb, raw_sheet_name, inputs.raw_df)
-    _append_question_sum_helpers(wb, raw_sheet_name, inputs.schema,
-                                 raw_col_to_letter, n_raw_rows=n_raw)
+    qsum_helpers = _append_question_sum_helpers(wb, raw_sheet_name, inputs.schema,
+                                                raw_col_to_letter, n_raw_rows=n_raw)
 
     # Segment helper columns (one per segment: labels each respondent with its
     # group name via a live priority IF/AND/OR formula) + an overlap-count column.
@@ -203,20 +220,32 @@ def export(inputs: ExportInputs, output_path: str | Path) -> Path:
 
     _write_divider_sheet(wb, "Output>>")
 
-    # Validation sheet first (theme + cross-cut sheets reference its option lists).
-    # Also writes each segment's group-name list for its dropdown.
-    filter_validation_ranges = _write_validation_sheet(
-        wb, inputs.schema, segment_helpers, n_raw_rows=n_raw)
-
     # Segments are Global Filters tagged to every cut & cross-cut: append them
     # after the user's question filters so they appear in every filter block.
     all_filters = list(inputs.filters) + [h["filter_slot"] for h in segment_helpers]
+
+    # Multi-select questions used as filters need a "pick one sub-option" dropdown
+    # and a CHOOSE(MATCH(...)) COUNTIFS clause (see _filter_clause). Collect them.
+    multi_filter_cids = [
+        f.column_id for f in all_filters
+        if (q := inputs.schema.by_column_id(f.column_id)) is not None
+        and q.question_type == QuestionType.MULTI_SELECT_BINARY
+    ]
+
+    # Validation sheet first (theme + cross-cut sheets reference its option lists).
+    # Also writes each segment's group-name list + each multi-select filter's
+    # ["All", sub-option…] list for its dropdown.
+    filter_validation_ranges, multi_filter_specs = _write_validation_sheet(
+        wb, inputs.schema, segment_helpers, n_raw_rows=n_raw,
+        multi_filter_cids=multi_filter_cids, qsum_helpers=qsum_helpers,
+        raw_col_to_letter=raw_col_to_letter, raw_sheet_name=raw_sheet_name)
 
     # Theme sheets
     for theme in inputs.themes:
         _write_theme_sheet(wb, theme, inputs.schema, all_filters, raw_col_to_letter,
                            raw_sheet_name, n_raw_rows=n_raw,
-                           filter_validation_ranges=filter_validation_ranges)
+                           filter_validation_ranges=filter_validation_ranges,
+                           multi_filter_specs=multi_filter_specs)
 
     # ONE consolidated Cross-cuts sheet (own Global Filters block + live formulas)
     if inputs.cross_cuts:
@@ -224,6 +253,7 @@ def export(inputs: ExportInputs, output_path: str | Path) -> Path:
             wb, list(inputs.cross_cuts), inputs.schema, all_filters,
             raw_col_to_letter, raw_sheet_name, n_raw_rows=n_raw,
             filter_validation_ranges=filter_validation_ranges,
+            multi_filter_specs=multi_filter_specs,
         )
 
     _write_divider_sheet(wb, "Mapping>>")
@@ -364,10 +394,12 @@ def _append_segment_helpers(
 
     for seg in segments:
         # Pre-resolve each group's condition expressions (row-independent parts).
-        # Each condition -> (colLetter, [(op, value), ...])  OR within predicates.
-        valid_groups: list[tuple[str, list[tuple[str, list]]]] = []
+        # Each condition -> (colLetter, [(op, value), ...], predicates_op).
+        # predicates_op combines predicates within a condition (default OR);
+        # conditions_op combines the conditions within the group (default AND).
+        valid_groups: list[tuple[str, list[tuple[str, list, str]], str]] = []
         for g in seg.groups:
-            conds: list[tuple[str, list]] = []
+            conds: list[tuple[str, list, str]] = []
             for cond in g.conditions:
                 # `column` is a raw-data column header; fall back to a question's
                 # first raw column for backward compatibility.
@@ -380,9 +412,11 @@ def _append_segment_helpers(
                          if p.value not in (None, "")]
                 if not letter or not preds:
                     continue
-                conds.append((letter, preds))
+                p_op = "AND" if str(getattr(cond, "predicates_op", "OR")).upper() == "AND" else "OR"
+                conds.append((letter, preds, p_op))
             if conds:
-                valid_groups.append((g.name, conds))
+                c_op = "OR" if str(getattr(g, "conditions_op", "AND")).upper() == "OR" else "AND"
+                valid_groups.append((g.name, conds, c_op))
         if not valid_groups:
             continue
 
@@ -407,16 +441,16 @@ def _append_segment_helpers(
         others = seg.others_label if seg.include_others else ""
         for row in range(2, n_raw_rows + 2):
             matches: list[str] = []
-            for _name, conds in valid_groups:
+            for _name, conds, c_op in valid_groups:
                 cond_exprs = []
-                for letter, preds in conds:
+                for letter, preds, p_op in conds:
                     cell = f"${letter}{row}"
-                    or_parts = [f"{cell}{op}{_formula_literal(v)}" for op, v in preds]
-                    cond_exprs.append("OR(" + ",".join(or_parts) + ")" if len(or_parts) > 1 else or_parts[0])
-                matches.append("AND(" + ",".join(cond_exprs) + ")" if len(cond_exprs) > 1 else cond_exprs[0])
+                    parts = [f"{cell}{op}{_formula_literal(v)}" for op, v in preds]
+                    cond_exprs.append(f"{p_op}(" + ",".join(parts) + ")" if len(parts) > 1 else parts[0])
+                matches.append(f"{c_op}(" + ",".join(cond_exprs) + ")" if len(cond_exprs) > 1 else cond_exprs[0])
             # Nested IF (priority order) → group label, else Others.
             expr = _excel_str(others)
-            for (name, _conds), m in zip(reversed(valid_groups), reversed(matches)):
+            for (name, _conds, _cop), m in zip(reversed(valid_groups), reversed(matches)):
                 expr = f'IF({m},{_excel_str(name)},{expr})'
             ws.cell(row=row, column=assign_col, value=f"={expr}")
             ovl = "+".join(f"(--({m}))" for m in matches)
@@ -424,7 +458,7 @@ def _append_segment_helpers(
 
         col_to_letter[header] = assign_letter
         col_to_letter[ovl_header] = ovl_letter
-        group_names = [name for name, _ in valid_groups]
+        group_names = [name for name, *_ in valid_groups]
         if seg.include_others:
             group_names.append(seg.others_label)
         out.append({
@@ -466,14 +500,23 @@ def _write_validation_sheet(
     schema: SurveySchema,
     segment_helpers: list[dict] | None = None,
     n_raw_rows: int = 0,
-) -> dict[str, tuple[str, str | None]]:
+    multi_filter_cids: tuple[str, ...] = (),
+    qsum_helpers: dict[str, str] | None = None,
+    raw_col_to_letter: dict[str, str] | None = None,
+    raw_sheet_name: str = "Raw data",
+) -> tuple[dict[str, tuple[str, str | None]], dict[str, dict]]:
     """Lookup tables that feed the Global Filters dropdowns. Writes label (col B,
     shown in the dropdown) + code (col C, used by COUNTIFS via VLOOKUP).
 
     Also writes each segment's group-name list (the dropdown values match the
     helper column's text directly, so their lookup_range is None) plus a live
-    overlap check counting respondents who matched more than one group.
-    Returns column_id -> (label_range, lookup_range | None).
+    overlap check counting respondents who matched more than one group, and each
+    multi-select filter's ["All", sub-option…] list.
+
+    Returns ``(ranges, multi_specs)`` where:
+      * ranges       : column_id -> (label_range, lookup_range | None)
+      * multi_specs  : column_id -> {"label_range", "choose_ranges"} for
+                       multi-select filters (see _filter_clause).
     """
     used = set(wb.sheetnames)
     sn = _safe_sheet("Validation", used)
@@ -539,7 +582,43 @@ def _write_validation_sheet(
             row += 1
         row += 1  # spacer
 
-    return ranges
+    # ── Multi-select filter dropdowns: ["All", sub-option 1, …] ──────────────
+    # Selecting "All" keeps every respondent who answered any sub-option; picking
+    # a sub-option keeps respondents who selected it. The COUNTIFS clause is
+    # CHOOSE(MATCH(cell, labels), qsumRange, sub1Range, …) with criterion ">=1",
+    # so the label order here MUST match choose_ranges = [qsum, sub1, sub2, …].
+    multi_specs: dict[str, dict] = {}
+    qsum_helpers = qsum_helpers or {}
+    raw_col_to_letter = raw_col_to_letter or {}
+    n1 = n_raw_rows + 1
+    for cid in (multi_filter_cids or ()):
+        q = schema.by_column_id(cid)
+        if q is None or not q.raw_columns:
+            continue
+        qsum_letter = qsum_helpers.get(cid)
+        sub_letters = [raw_col_to_letter.get(sc) for sc in q.raw_columns]
+        if not qsum_letter or any(l is None for l in sub_letters):
+            continue  # can't build a live clause — skip (filter silently inert)
+        labels = ["All"] + [str(q.sub_column_labels.get(sc, sc)) for sc in q.raw_columns]
+        _style(ws.cell(row=row, column=1, value=f"{cid} — {q.question_text[:40]} (multi)"),
+               font=_F_DATAMAP_SECTION)
+        row += 1
+        first_val_row = row
+        for lbl in labels:
+            ws.cell(row=row, column=2, value=lbl).font = _F_BODY
+            row += 1
+        last_val_row = row - 1
+        safe_sn = f"'{sheet_name}'" if any(c in sheet_name for c in " '!") else sheet_name
+        label_range = f"{safe_sn}!$B${first_val_row}:$B${last_val_row}"
+        qsum_range = f"'{raw_sheet_name}'!${qsum_letter}$2:${qsum_letter}${n1}"
+        sub_ranges = [f"'{raw_sheet_name}'!${l}$2:${l}${n1}" for l in sub_letters]
+        multi_specs[cid] = {
+            "label_range": label_range,
+            "choose_ranges": [qsum_range, *sub_ranges],
+        }
+        row += 1  # spacer
+
+    return ranges, multi_specs
 
 
 # ── Global Filters block (shared by theme sheets & the Cross-cuts sheet) ──────
@@ -549,6 +628,7 @@ def _write_global_filters_block(
     ws,
     filters: list[FilterSlot],
     filter_validation_ranges: dict[str, tuple[str, str]] | None,
+    multi_filter_specs: dict[str, dict] | None = None,
 ) -> list[tuple[FilterSlot, str, str | None]]:
     """Write the reference-style Global Filters block (rows 1..16).
 
@@ -567,29 +647,37 @@ def _write_global_filters_block(
     ws.row_dimensions[1].height = 20
 
     ranges_map = filter_validation_ranges or {}
+    multi_specs = multi_filter_specs or {}
     filter_cell_refs: list[tuple[FilterSlot, str, str | None]] = []
-    for i, f in enumerate(filters[:12], start=0):
+    for i, f in enumerate(filters[:_MAX_FILTERS], start=0):
         r = 3 + i
         _style(ws.cell(row=r, column=2, value=f.name),
                font=_F_FILTER_NAME, fill=_FILL_BANNER, align=_ALIGN_LEFT)
         _style(ws.cell(row=r, column=3, value=f.default_value),
                font=_F_BODY, fill=_FILL_GRAY)
-        slot_ranges = ranges_map.get(f.column_id) or ranges_map.get(f.name)
-        label_range = slot_ranges[0] if slot_ranges else None
-        lookup_range = slot_ranges[1] if slot_ranges else None
-        if lookup_range:
-            _style(ws.cell(row=r, column=4,
-                           value=f'=IFERROR(VLOOKUP(C{r},{lookup_range},2,0),"")'),
-                   font=_F_BODY, fill=_FILL_CODE)
-        else:
+        mspec = multi_specs.get(f.column_id)
+        if mspec:
+            # Multi-select filter: dropdown of sub-options; no VLOOKUP code cell.
+            label_range = mspec["label_range"]
+            lookup_range = None
             _style(ws.cell(row=r, column=4), fill=_FILL_CODE)
+        else:
+            slot_ranges = ranges_map.get(f.column_id) or ranges_map.get(f.name)
+            label_range = slot_ranges[0] if slot_ranges else None
+            lookup_range = slot_ranges[1] if slot_ranges else None
+            if lookup_range:
+                _style(ws.cell(row=r, column=4,
+                               value=f'=IFERROR(VLOOKUP(C{r},{lookup_range},2,0),"")'),
+                       font=_F_BODY, fill=_FILL_CODE)
+            else:
+                _style(ws.cell(row=r, column=4), fill=_FILL_CODE)
         filter_cell_refs.append((f, f"$C${r}", lookup_range))
         if label_range:
             dv = DataValidation(type="list", formula1=f"={label_range}",
                                 allow_blank=True, showDropDown=False)
             dv.add(f"C{r}")
             ws.add_data_validation(dv)
-    n = len(filters[:12])
+    n = len(filters[:_MAX_FILTERS])
     last_row = 2 + n if n else 1
     # Frame the filter panel with a clean outer border only — no inner lines,
     # so the red/grey fills read as one contiguous block.
@@ -607,6 +695,7 @@ def _write_theme_sheet(
     raw_sheet_name: str,
     n_raw_rows: int,
     filter_validation_ranges: dict[str, tuple[str, str]] | None = None,
+    multi_filter_specs: dict[str, dict] | None = None,
 ) -> None:
     used = set(wb.sheetnames)
     sn = _safe_sheet(theme.name, used)
@@ -618,8 +707,9 @@ def _write_theme_sheet(
     for c in range(3, 14):
         ws.column_dimensions[get_column_letter(c)].width = 18
 
-    last_filter_row = _write_global_filters_block(ws, filters, filter_validation_ranges)
-    refs = _filter_refs_from_block(filters, filter_validation_ranges)
+    last_filter_row = _write_global_filters_block(ws, filters, filter_validation_ranges,
+                                                  multi_filter_specs)
+    refs = _filter_refs_from_block(filters, filter_validation_ranges, multi_filter_specs)
 
     # One blank separator row under the filter panel, then the cuts. The filter
     # panel is NOT frozen.
@@ -637,16 +727,18 @@ def _write_theme_sheet(
 def _filter_refs_from_block(
     filters: list[FilterSlot],
     filter_validation_ranges: dict[str, tuple[str, str]] | None,
-) -> list[tuple[FilterSlot, str, str | None]]:
-    """Reconstruct (FilterSlot, "$C$r", lookup_range) for the filter block that
-    _write_global_filters_block laid out (rows 3.. in column C)."""
+    multi_filter_specs: dict[str, dict] | None = None,
+) -> list[tuple[FilterSlot, str, str | None, dict | None]]:
+    """Reconstruct (FilterSlot, "$C$r", lookup_range, multi_spec) for the filter
+    block that _write_global_filters_block laid out (rows 3.. in column C)."""
     ranges_map = filter_validation_ranges or {}
-    out: list[tuple[FilterSlot, str, str | None]] = []
-    for i, f in enumerate(filters[:12], start=0):
+    multi_specs = multi_filter_specs or {}
+    out: list[tuple[FilterSlot, str, str | None, dict | None]] = []
+    for i, f in enumerate(filters[:_MAX_FILTERS], start=0):
         r = 3 + i
         slot_ranges = ranges_map.get(f.column_id) or ranges_map.get(f.name)
         lookup_range = slot_ranges[1] if slot_ranges else None
-        out.append((f, f"$C${r}", lookup_range))
+        out.append((f, f"$C${r}", lookup_range, multi_specs.get(f.column_id)))
     return out
 
 
@@ -660,13 +752,11 @@ def _write_question_cut(
     n_raw_rows: int,
 ) -> int:
     """Write one question's cut block starting at `start_row`. Returns next free row."""
-    # Grey question header spanning A:D — bold black on light grey, matching the
-    # reference workbook's question row (no red on question headers).
-    ws.merge_cells(start_row=start_row, end_row=start_row, start_column=1, end_column=4)
+    # Grey question header — bold black on light grey. Spans the full width
+    # (to column ZA) so the banner never looks cut off beside a wide grid/matrix.
+    ws.merge_cells(start_row=start_row, end_row=start_row, start_column=1, end_column=_HEADER_SPAN_COL)
     cell = ws.cell(row=start_row, column=1, value=f"{q.column_id}: {q.question_text}")
     _style(cell, font=_F_LABEL, fill=_FILL_GRAY, align=_ALIGN_LEFT)
-    for c in range(2, 5):
-        _style(ws.cell(row=start_row, column=c), fill=_FILL_GRAY)
     ws.row_dimensions[start_row].height = 18
 
     body_row = start_row + 1
@@ -676,9 +766,10 @@ def _write_question_cut(
         QuestionType.SINGLE_SELECT: _write_single_select_block,
         QuestionType.BINARY_TWO_OPTIONS: _write_single_select_block,
         QuestionType.MULTI_SELECT_BINARY: _write_multi_select_block,
-        QuestionType.GRID_RATED: _write_grid_rated_block,
-        QuestionType.GRID_SINGLE_SELECT: _write_grid_rated_block,
+        QuestionType.GRID_RATED: _write_grid_matrix_block,
+        QuestionType.GRID_SINGLE_SELECT: _write_grid_matrix_block,
         QuestionType.NUMERIC_ALLOCATION: _write_numeric_alloc_block,
+        QuestionType.NUMERIC_GRID: _write_numeric_grid_block,
         QuestionType.NPS: _write_nps_block,
         QuestionType.RANKING: _write_ranking_block,
         QuestionType.DIRECT_NUMERIC: _write_direct_numeric_block,
@@ -701,11 +792,23 @@ def _filter_clause(filter_refs, raw_col_to_letter, raw_sheet_name, n_raw_rows) -
     where the picked LABEL is translated to its CODE via VLOOKUP against Validation."""
     parts: list[str] = []
     for entry in filter_refs:
-        if len(entry) == 3:
+        mspec: dict | None = None
+        if len(entry) >= 4:
+            f, cell_ref, lookup_range, mspec = entry[0], entry[1], entry[2], entry[3]
+        elif len(entry) == 3:
             f, cell_ref, lookup_range = entry
         else:
             f, cell_ref = entry
             lookup_range = None
+        if mspec:
+            # Multi-select filter. The picked label selects which raw column the
+            # criterion applies to: "All" → the _q_sum column (answered any),
+            # a sub-option → that sub-column. Criterion ">=1" works for both
+            # (q_sum>=1 = answered any; a 0/1 sub-col >=1 = selected).
+            choose = (f'CHOOSE(MATCH({cell_ref},{mspec["label_range"]},0),'
+                      + ",".join(mspec["choose_ranges"]) + ")")
+            parts.append(f'{choose},">=1"')
+            continue
         col_letter = raw_col_to_letter.get(f.column_id)
         if not col_letter:
             continue
@@ -788,7 +891,7 @@ def _write_single_select_block(ws, q, start_row, filter_refs, raw_col_to_letter,
                        value=f"=C{r}=SUM(C{first_opt}:C{last_opt})"), font=_F_CHECK)
     else:
         _style(ws.cell(row=r, column=_METRIC_COL + 1), fill=_FILL_GRAY, border=_BORDER)
-    _table_border(ws, start_row, _LABEL_COL, r, _METRIC_COL + 1)
+    _table_border(ws, start_row, _LABEL_COL, r, _METRIC_COL + 1, dividers=(_METRIC_COL,))
     return r + 2
 
 
@@ -839,7 +942,7 @@ def _write_multi_select_block(ws, q, start_row, filter_refs, raw_col_to_letter,
                           + (f",{fclause}" if fclause else "") + "),0)")),
            font=_F_HEAD, fill=_FILL_GRAY, border=_BORDER)
     _style(ws.cell(row=r, column=_METRIC_COL + 1), fill=_FILL_GRAY, border=_BORDER)
-    _table_border(ws, start_row, _LABEL_COL, r, _METRIC_COL + 1)
+    _table_border(ws, start_row, _LABEL_COL, r, _METRIC_COL + 1, dividers=(_METRIC_COL,))
     return r + 1
 
 
@@ -871,6 +974,99 @@ def _write_grid_rated_block(ws, q, start_row, filter_refs, raw_col_to_letter,
     return r
 
 
+def _write_grid_matrix_block(ws, q, start_row, filter_refs, raw_col_to_letter,
+                             raw_sheet_name, n_raw_rows) -> int:
+    """Non-numerical grid → a scale × option crosstab: rows = scale values,
+    columns = grid options, a ``# of respondents`` block + a ``% of respondents``
+    block (% = cell / column total), a Total-respondents row, and a red→green
+    colour-scale heatmap on each option's % column.
+
+    Cell = COUNTIFS(optionColumn, scaleCode, filters). Falls back to the plain
+    per-option mean block if the grid has no legend/options.
+    """
+    opts = [c for c in q.raw_columns if raw_col_to_letter.get(c)]
+    scale = list(q.option_map.items())              # (code, label) in declared order
+    if not opts or not scale:
+        return _write_grid_rated_block(ws, q, start_row, filter_refs,
+                                       raw_col_to_letter, raw_sheet_name, n_raw_rows)
+
+    fclause = _filter_clause(filter_refs, raw_col_to_letter, raw_sheet_name, n_raw_rows)
+    n_opts = len(opts)
+    count_start = _METRIC_COL
+    count_end = count_start + n_opts - 1
+    pct_start = count_end + 1
+    pct_end = pct_start + n_opts - 1
+
+    # Grouped headers: "# of respondents" / "% of respondents"
+    grp_row = start_row
+    _hdr(ws, grp_row, count_start, "# of respondents")
+    if n_opts > 1:
+        ws.merge_cells(start_row=grp_row, end_row=grp_row, start_column=count_start, end_column=count_end)
+    for c in range(count_start + 1, count_end + 1):
+        _style(ws.cell(row=grp_row, column=c), fill=_FILL_GRAY, border=_BORDER)
+    _hdr(ws, grp_row, pct_start, "% of respondents")
+    if n_opts > 1:
+        ws.merge_cells(start_row=grp_row, end_row=grp_row, start_column=pct_start, end_column=pct_end)
+    for c in range(pct_start + 1, pct_end + 1):
+        _style(ws.cell(row=grp_row, column=c), fill=_FILL_GRAY, border=_BORDER)
+
+    # Option-label sub-header (same labels under each block)
+    hdr_row = grp_row + 1
+    _code(ws, hdr_row, q.column_id, italic=True)
+    for j, col in enumerate(opts):
+        lbl = str(q.sub_column_labels.get(col, col))[:40]
+        _hdr(ws, hdr_row, count_start + j, lbl)
+        _hdr(ws, hdr_row, pct_start + j, lbl)
+
+    body_start = hdr_row + 1
+    total_row = body_start + len(scale)
+
+    for i, (code, label) in enumerate(scale):
+        rr = body_start + i
+        _code(ws, rr, code)
+        _label(ws, rr, label)
+        crit = _excel_str(code)
+        for j, col in enumerate(opts):
+            letter = raw_col_to_letter[col]
+            rng = f"'{raw_sheet_name}'!${letter}$2:${letter}${n_raw_rows + 1}"
+            _style(ws.cell(row=rr, column=count_start + j,
+                           value=(f"=IFERROR(COUNTIFS({rng},{crit}"
+                                  + (f",{fclause}" if fclause else "") + "),0)")),
+                   font=_F_BODY, border=_BORDER)
+            cl = get_column_letter(count_start + j)
+            col_total_ref = f"{cl}${total_row}"
+            _style(ws.cell(row=rr, column=pct_start + j,
+                           value=f"=IFERROR({cl}{rr}/{col_total_ref},0)"),
+                   font=_F_BODY, border=_BORDER, numfmt=_PCT_FMT)
+
+    # Total respondents row (per option: non-blank count; % column sums to 100%)
+    _label(ws, total_row, "Total respondents")
+    for j, col in enumerate(opts):
+        letter = raw_col_to_letter[col]
+        rng = f"'{raw_sheet_name}'!${letter}$2:${letter}${n_raw_rows + 1}"
+        _style(ws.cell(row=total_row, column=count_start + j,
+                       value=(f"=IFERROR(COUNTIFS({rng},\"<>\""
+                              + (f",{fclause}" if fclause else "") + "),0)")),
+               font=_F_HEAD, fill=_FILL_GRAY, border=_BORDER)
+        pl = get_column_letter(pct_start + j)
+        _style(ws.cell(row=total_row, column=pct_start + j,
+                       value=f"=IFERROR(SUM({pl}{body_start}:{pl}{total_row - 1}),0)"),
+               font=_F_HEAD, fill=_FILL_GRAY, border=_BORDER, numfmt=_PCT_FMT)
+
+    # Red→yellow→green colour scale on each option's % column (per-column scaling)
+    for j in range(n_opts):
+        pl = get_column_letter(pct_start + j)
+        ws.conditional_formatting.add(
+            f"{pl}{body_start}:{pl}{total_row - 1}",
+            ColorScaleRule(start_type="min", start_color="F8696B",
+                           mid_type="percentile", mid_value=50, mid_color="FFEB84",
+                           end_type="max", end_color="63BE7B"),
+        )
+
+    _table_border(ws, grp_row, _LABEL_COL, total_row, pct_end, dividers=(count_end,))
+    return total_row + 2
+
+
 def _write_numeric_alloc_block(ws, q, start_row, filter_refs, raw_col_to_letter,
                                raw_sheet_name, n_raw_rows) -> int:
     fclause = _filter_clause(filter_refs, raw_col_to_letter, raw_sheet_name, n_raw_rows)
@@ -894,6 +1090,36 @@ def _write_numeric_alloc_block(ws, q, start_row, filter_refs, raw_col_to_letter,
                        value=(f"=IFERROR(AVERAGEIFS({rng},{rng},\">=0\""
                               + (f",{fclause}" if fclause else "") + "),0)")),
                font=_F_BODY, border=_BORDER, numfmt="0.0")
+        r += 1
+    _table_border(ws, start_row, _LABEL_COL, r - 1, _METRIC_COL + 1)
+    return r
+
+
+def _write_numeric_grid_block(ws, q, start_row, filter_refs, raw_col_to_letter,
+                              raw_sheet_name, n_raw_rows) -> int:
+    """Free numeric entry per column — Mean = AVERAGEIFS(range, range, "<>") so
+    negatives / percent-change values are included (unlike the allocation block)."""
+    fclause = _filter_clause(filter_refs, raw_col_to_letter, raw_sheet_name, n_raw_rows)
+    _code(ws, start_row, q.column_id, italic=True)
+    _hdr(ws, start_row, _METRIC_COL, "Valid n")
+    _hdr(ws, start_row, _METRIC_COL + 1, "Mean")
+
+    r = start_row + 1
+    for sub_col in q.raw_columns:
+        letter = raw_col_to_letter.get(sub_col)
+        if letter is None:
+            continue
+        rng = f"'{raw_sheet_name}'!${letter}$2:${letter}${n_raw_rows + 1}"
+        _code(ws, r, sub_col, italic=True)
+        _label(ws, r, q.sub_column_labels.get(sub_col, sub_col))
+        _style(ws.cell(row=r, column=_METRIC_COL,
+                       value=(f"=IFERROR(COUNTIFS({rng},\"<>\""
+                              + (f",{fclause}" if fclause else "") + "),0)")),
+               font=_F_BODY, border=_BORDER)
+        _style(ws.cell(row=r, column=_METRIC_COL + 1,
+                       value=(f"=IFERROR(AVERAGEIFS({rng},{rng},\"<>\""
+                              + (f",{fclause}" if fclause else "") + "),0)")),
+               font=_F_BODY, border=_BORDER, numfmt="0.00")
         r += 1
     _table_border(ws, start_row, _LABEL_COL, r - 1, _METRIC_COL + 1)
     return r
@@ -944,7 +1170,7 @@ def _write_nps_block(ws, q, start_row, filter_refs, raw_col_to_letter,
                    value=(f"=IFERROR(COUNTIFS({rng},\">=0\""
                           + (f",{fclause}" if fclause else "") + "),0)")),
            font=_F_HEAD, fill=_FILL_GRAY, border=_BORDER)
-    _table_border(ws, start_row, _LABEL_COL, nps_r + 1, _METRIC_COL + 1)
+    _table_border(ws, start_row, _LABEL_COL, nps_r + 1, _METRIC_COL + 1, dividers=(_METRIC_COL,))
     return nps_r + 2
 
 
@@ -1024,6 +1250,7 @@ def _write_cross_cuts_sheet(
     raw_sheet_name: str,
     n_raw_rows: int,
     filter_validation_ranges: dict[str, tuple[str, str]] | None = None,
+    multi_filter_specs: dict[str, dict] | None = None,
 ) -> None:
     """ONE 'Cross-cuts' sheet. Global Filters block on top; every cross-cut
     stacked below with a bold ``Row x Col`` header, an italic full-text subtitle,
@@ -1038,8 +1265,9 @@ def _write_cross_cuts_sheet(
     for c in range(3, 30):
         ws.column_dimensions[get_column_letter(c)].width = 16
 
-    last_filter_row = _write_global_filters_block(ws, filters, filter_validation_ranges)
-    refs = _filter_refs_from_block(filters, filter_validation_ranges)
+    last_filter_row = _write_global_filters_block(ws, filters, filter_validation_ranges,
+                                                  multi_filter_specs)
+    refs = _filter_refs_from_block(filters, filter_validation_ranges, multi_filter_specs)
     fclause = _filter_clause(refs, raw_col_to_letter, raw_sheet_name, n_raw_rows)
 
     # One blank separator row under the filters; not frozen.
@@ -1177,7 +1405,7 @@ def _write_one_cross_cut(ws, cc: CrossCutResult, schema, raw_col_to_letter,
                        value=f"={cl}{total_row}=SUM({cl}{body_start}:{cl}{total_row - 1})"),
                font=_F_CHECK)
     # Frame the matrix (grouped headers → total row) with the shared table border.
-    _table_border(ws, grp_row, _LABEL_COL, total_row, pct_end)
+    _table_border(ws, grp_row, _LABEL_COL, total_row, pct_end, dividers=(count_end,))
     return check_row + 1
 
 

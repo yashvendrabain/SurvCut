@@ -9,8 +9,9 @@ import { cn } from "@/lib/utils";
 const STEPS = [
   { href: "/upload",    label: "Upload" },
   { href: "/validate",  label: "Validate" },
-  { href: "/filters-segments", label: "Filters & segments" },
-  { href: "/crosscuts", label: "Cross Cuts" },
+  { href: "/filters-segments", label: "Add/Create filters" },
+  { href: "/dashboard", label: "Dashboard" },
+  { href: "/crosscuts", label: "Create cuts" },
   { href: "/generate",  label: "Generate" },
 ];
 

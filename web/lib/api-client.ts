@@ -26,6 +26,16 @@ export interface QuestionSummary {
   is_demographic: boolean;
   analysis_eligible: boolean;
   options: OptionItem[];
+  sub_options: OptionItem[];   // sub-column id → label (multi/grid/ranking)
+}
+
+// ── Dashboard preview selections (applied server-side before compute) ──
+export interface FilterSelection { column_id: string; value: string; }
+export interface SegmentSelection { name: string; value: string; }
+export interface PreviewSelection {
+  filter_selections?: FilterSelection[];
+  segments?: SegmentPayload[];
+  segment_selections?: SegmentSelection[];
 }
 
 export interface SegmentPredicatePayload {
@@ -34,11 +44,13 @@ export interface SegmentPredicatePayload {
 }
 export interface SegmentConditionPayload {
   column: string;
-  predicates: SegmentPredicatePayload[];   // OR within
+  predicates: SegmentPredicatePayload[];   // combined by predicates_op
+  predicates_op: string;                    // "OR" | "AND"
 }
 export interface SegmentGroupPayload {
   name: string;
-  conditions: SegmentConditionPayload[];    // AND across
+  conditions: SegmentConditionPayload[];    // combined by conditions_op
+  conditions_op: string;                    // "AND" | "OR"
 }
 export interface SegmentPayload {
   name: string;
@@ -88,12 +100,12 @@ export async function getSchema(sessionId: string): Promise<SchemaResponse> {
 }
 
 export async function computeCrossCut(
-  sessionId: string, rowQid: string, colQid: string
+  sessionId: string, rowQid: string, colQid: string, selection: PreviewSelection = {}
 ): Promise<CrossCutResponse> {
   const r = await fetch(`${BASE}/api/crosscuts/compute`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, row_qid: rowQid, col_qid: colQid }),
+    body: JSON.stringify({ session_id: sessionId, row_qid: rowQid, col_qid: colQid, ...selection }),
   });
   if (!r.ok) throw new Error(await r.text());
   return r.json();
@@ -132,6 +144,11 @@ export interface CutRowData {
   count: number;
   pct: number;
 }
+export interface CutMatrix {
+  row_labels: string[];
+  col_labels: string[];
+  counts: number[][];
+}
 export interface CutData {
   column_id: string;
   question_text: string;
@@ -140,13 +157,16 @@ export interface CutData {
   headline_metric: string;
   value_is_mean: boolean;
   rows: CutRowData[];
+  matrix?: CutMatrix | null;   // ranking: full ranks × options matrix
 }
 
-export async function getCuts(sessionId: string, columnIds: string[] = []): Promise<CutData[]> {
+export async function getCuts(
+  sessionId: string, columnIds: string[] = [], selection: PreviewSelection = {}
+): Promise<CutData[]> {
   const r = await fetch(`${BASE}/api/cuts/compute`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: sessionId, column_ids: columnIds }),
+    body: JSON.stringify({ session_id: sessionId, column_ids: columnIds, ...selection }),
   });
   if (!r.ok) throw new Error(await r.text());
   const j = await r.json();

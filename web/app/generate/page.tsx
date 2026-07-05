@@ -10,7 +10,6 @@ import { toast } from "sonner";
 import { buildWorkbook, downloadUrl, type BuildResponse } from "@/lib/api-client";
 import { useWizardStore } from "@/lib/store";
 import { WizardProgress } from "@/components/wizard-progress";
-import { CutVisualizer } from "@/components/cut-visualizer";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -45,9 +44,11 @@ export default function GeneratePage() {
           groups: s.groups
             .map(g => ({
               name: g.name,
+              conditions_op: g.conditionsOp,
               conditions: g.conditions
                 .map(c => ({
                   column: c.column,
+                  predicates_op: c.predicatesOp,
                   predicates: c.predicates.filter(p => p.value !== ""),
                 }))
                 .filter(c => c.predicates.length > 0),
@@ -85,12 +86,6 @@ export default function GeneratePage() {
 
   const nonEmptyThemes = themeOrder.filter(t => (themes[t]?.length ?? 0) > 0);
 
-  // Pool of picked cuts (themed questions) offered in the visualizer's picker.
-  const pickedIds = new Set(Object.values(themes).flat());
-  const vizPool = schema.questions
-    .filter(q => pickedIds.has(q.column_id))
-    .map(q => ({ column_id: q.column_id, question_text: q.question_text }));
-
   return (
     <div>
       <WizardProgress />
@@ -119,7 +114,7 @@ export default function GeneratePage() {
           </div>
           {nonEmptyThemes.length === 0 ? (
             <p className="text-sm text-ink-500">
-              No themes have any questions. Go to <Link href="/filters-segments" className="text-bain-600 font-medium underline underline-offset-2">Filters &amp; segments</Link> and add some.
+              No themes have any questions. Go to <Link href="/filters-segments" className="text-bain-600 font-medium underline underline-offset-2">Add/create filters</Link> and add some.
             </p>
           ) : (
             <div className="space-y-1.5 max-h-64 overflow-y-auto">
@@ -140,7 +135,7 @@ export default function GeneratePage() {
           </div>
           {queuedCrossCuts.length === 0 ? (
             <p className="text-sm text-ink-500">
-              None queued. Add some on the <Link href="/crosscuts" className="text-bain-600 font-medium underline underline-offset-2">Cross Cuts</Link> page (optional).
+              None queued. Add some on the <Link href="/crosscuts" className="text-bain-600 font-medium underline underline-offset-2">Create cuts</Link> page (optional).
             </p>
           ) : (
             <div className="space-y-1.5 max-h-64 overflow-y-auto">
@@ -154,11 +149,6 @@ export default function GeneratePage() {
             </div>
           )}
         </Card>
-      </div>
-
-      {/* Visualize picked cuts in think-cell-style charts */}
-      <div className="border-t border-ink-200 pt-8 mb-10">
-        <CutVisualizer sessionId={sessionId} pool={vizPool} />
       </div>
 
       <div className="flex justify-between items-center">

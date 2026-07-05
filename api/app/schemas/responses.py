@@ -32,6 +32,7 @@ class QuestionSummary(BaseModel):
     is_demographic: bool
     analysis_eligible: bool
     options: list[OptionItem] = []
+    sub_options: list[OptionItem] = []   # sub-column id → label (multi/grid/ranking)
 
 
 class RawColumn(BaseModel):
@@ -48,10 +49,50 @@ class SchemaResponse(BaseModel):
     raw_columns: list[RawColumn] = []
 
 
+# ── Segment definitions (also used to evaluate segment masks in previews) ──
+class SegmentPredicateIn(BaseModel):
+    op: str = "="                  # = <> > >= < <=
+    value: str = ""
+
+
+class SegmentConditionIn(BaseModel):
+    column: str                    # raw-data column header
+    predicates: list[SegmentPredicateIn] = []   # combined by predicates_op
+    predicates_op: str = "OR"      # how predicates combine: "OR" | "AND"
+
+
+class SegmentGroupIn(BaseModel):
+    name: str
+    conditions: list[SegmentConditionIn] = []   # combined by conditions_op
+    conditions_op: str = "AND"     # how conditions combine: "AND" | "OR"
+
+
+class SegmentIn(BaseModel):
+    name: str
+    groups: list[SegmentGroupIn] = []           # priority order (first match wins)
+    include_others: bool = True
+    others_label: str = "Others"
+
+
+# ── Dashboard preview selections (applied as a pandas row-mask before compute) ──
+class FilterSelectionIn(BaseModel):
+    column_id: str
+    value: str = "All"             # option / sub-option LABEL, or "All" (no constraint)
+
+
+class SegmentSelectionIn(BaseModel):
+    name: str
+    value: str = "All"             # picked group label, or "All" (no constraint)
+
+
 class CrossCutRequest(BaseModel):
     session_id: str
     row_qid: str
     col_qid: str
+    # Optional preview selections — applied before computing (dashboard).
+    filter_selections: list[FilterSelectionIn] = []
+    segments: list[SegmentIn] = []
+    segment_selections: list[SegmentSelectionIn] = []
 
 
 class CrossCutResponse(BaseModel):
@@ -64,28 +105,6 @@ class CrossCutResponse(BaseModel):
 class QueuedCrossCut(BaseModel):
     row_qid: str
     col_qid: str
-
-
-class SegmentPredicateIn(BaseModel):
-    op: str = "="                  # = <> > >= < <=
-    value: str = ""
-
-
-class SegmentConditionIn(BaseModel):
-    column: str                    # raw-data column header
-    predicates: list[SegmentPredicateIn] = []   # OR within predicates
-
-
-class SegmentGroupIn(BaseModel):
-    name: str
-    conditions: list[SegmentConditionIn] = []   # AND across conditions
-
-
-class SegmentIn(BaseModel):
-    name: str
-    groups: list[SegmentGroupIn] = []           # priority order (first match wins)
-    include_others: bool = True
-    others_label: str = "Others"
 
 
 class BuildRequest(BaseModel):
@@ -106,12 +125,23 @@ class BuildResponse(BaseModel):
 class CutsRequest(BaseModel):
     session_id: str
     column_ids: list[str] = []      # empty → every analysis-eligible question
+    # Optional preview selections — applied before computing (dashboard).
+    filter_selections: list[FilterSelectionIn] = []
+    segments: list[SegmentIn] = []
+    segment_selections: list[SegmentSelectionIn] = []
 
 
 class CutRowOut(BaseModel):
     label: str
     count: float
     pct: float                      # % of base, OR the mean when value_is_mean
+
+
+class CutMatrixOut(BaseModel):
+    """A ranks × options matrix (ranking cuts) — rows are options, columns Rank 1..K."""
+    row_labels: list[str] = []
+    col_labels: list[str] = []
+    counts: list[list[float]] = []
 
 
 class CutDataOut(BaseModel):
@@ -122,6 +152,7 @@ class CutDataOut(BaseModel):
     headline_metric: str = ""
     value_is_mean: bool = False     # grids/numeric report a mean in `pct`, not a share
     rows: list[CutRowOut] = []
+    matrix: CutMatrixOut | None = None   # populated for ranking (full rank matrix)
 
 
 class CutsResponse(BaseModel):

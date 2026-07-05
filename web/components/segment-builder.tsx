@@ -19,6 +19,26 @@ const OPS = [
   { v: "<>", label: "≠" },
 ];
 
+/** Small AND/OR segmented toggle used for both condition- and predicate-level combinators. */
+function OpToggle({ value, onChange }: { value: "AND" | "OR"; onChange: (v: "AND" | "OR") => void }) {
+  return (
+    <span className="inline-flex rounded-md border border-ink-200 overflow-hidden text-[11px] font-bold leading-none">
+      {(["AND", "OR"] as const).map(op => (
+        <button
+          key={op}
+          type="button"
+          onClick={(e) => { e.preventDefault(); onChange(op); }}
+          className={`px-2 py-1 transition-colors ${
+            value === op ? "bg-bain-500 text-white" : "bg-white text-ink-500 hover:bg-ink-100"
+          }`}
+        >
+          {op}
+        </button>
+      ))}
+    </span>
+  );
+}
+
 export function SegmentBuilder() {
   const schema = useWizardStore(s => s.schema);
   const segments = useWizardStore(s => s.segments);
@@ -50,7 +70,13 @@ export function SegmentBuilder() {
       g.id === gid ? { ...g, conditions: g.conditions.map(c => (c.id === condId ? fn(c) : c)) } : g));
 
   function addGroup(seg: Segment) {
-    patchGroups(seg, [...seg.groups, { id: newId("grp"), name: `Option ${seg.groups.length + 1}`, conditions: [] }]);
+    patchGroups(seg, [...seg.groups, { id: newId("grp"), name: `Option ${seg.groups.length + 1}`, conditions: [], conditionsOp: "AND" }]);
+  }
+  function setConditionsOp(seg: Segment, gid: string, op: "AND" | "OR") {
+    patchGroups(seg, seg.groups.map(g => (g.id === gid ? { ...g, conditionsOp: op } : g)));
+  }
+  function setPredicatesOp(seg: Segment, gid: string, condId: string, op: "AND" | "OR") {
+    mapCond(seg, gid, condId, c => ({ ...c, predicatesOp: op }));
   }
   function removeGroup(seg: Segment, gid: string) {
     patchGroups(seg, seg.groups.filter(g => g.id !== gid));
@@ -63,6 +89,7 @@ export function SegmentBuilder() {
     const cond: SegmentCondition = {
       id: newId("cond"),
       column,
+      predicatesOp: "OR",
       predicates: hasOptions(column) ? [] : [{ op: colByName[column]?.numeric ? ">=" : "=", value: "" }],
     };
     patchGroups(seg, seg.groups.map(g => (g.id === gid ? { ...g, conditions: [...g.conditions, cond] } : g)));
@@ -94,16 +121,20 @@ export function SegmentBuilder() {
 
   function humanCond(c: SegmentCondition): string {
     const col = colByName[c.column];
+    const glue = c.predicatesOp === "AND" ? " AND " : " OR ";
     if (hasOptions(c.column)) {
       const labels = c.predicates.filter(p => p.op === "=").map(p => col?.options.find(o => o.code === p.value)?.label ?? p.value);
-      return labels.length ? `${c.column} ∈ {${labels.join(", ")}}` : `${c.column} (pick options)`;
+      if (!labels.length) return `${c.column} (pick options)`;
+      return c.predicatesOp === "AND"
+        ? `${c.column} = all of {${labels.join(", ")}}`
+        : `${c.column} ∈ {${labels.join(", ")}}`;
     }
     const parts = c.predicates.filter(p => p.value !== "").map(p => `${OPS.find(o => o.v === p.op)?.label ?? p.op} ${p.value}`);
-    return parts.length ? `${c.column} ${parts.join(" OR ")}` : `${c.column} (set a value)`;
+    return parts.length ? `${c.column} ${parts.join(glue)}` : `${c.column} (set a value)`;
   }
   function humanGroup(g: SegmentGroup): string {
     const parts = g.conditions.map(humanCond);
-    return parts.length ? parts.join("  AND  ") : "(no conditions yet)";
+    return parts.length ? parts.join(`  ${g.conditionsOp}  `) : "(no conditions yet)";
   }
 
   return (
@@ -209,17 +240,38 @@ export function SegmentBuilder() {
 
                 {/* Conditions */}
                 <div className="space-y-3">
-                  {g.conditions.map((c) => {
+                  {g.conditions.length >= 2 && (
+                    <div className="flex items-center gap-2 text-xs text-ink-500 pb-1">
+                      <span>Combine these conditions with</span>
+                      <OpToggle value={g.conditionsOp} onChange={(op) => setConditionsOp(active, g.id, op)} />
+                    </div>
+                  )}
+                  {g.conditions.map((c, ci) => {
                     const col = colByName[c.column];
                     const qtext = questionTextByCol[c.column];
+                    const nPreds = hasOptions(c.column)
+                      ? c.predicates.filter(p => p.op === "=").length
+                      : c.predicates.length;
                     return (
-                      <div key={c.id} className="rounded-xl border border-ink-200 bg-ink-50/50 p-3">
+                      <div key={c.id}>
+                        {ci > 0 && (
+                          <div className="flex justify-center py-1">
+                            <span className="px-2 py-0.5 rounded bg-ink-100 text-[10px] font-bold text-ink-500">{g.conditionsOp}</span>
+                          </div>
+                        )}
+                        <div className="rounded-xl border border-ink-200 bg-ink-50/50 p-3">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="font-mono text-xs text-bain-600">{c.column}</span>
                           {col?.numeric && <Badge tone="blue">numeric</Badge>}
                           <span className="text-sm text-ink-600 truncate">{qtext ?? (col?.numeric ? "numeric column" : "column")}</span>
+                          {nPreds >= 2 && (
+                            <span className="ml-auto flex items-center gap-1.5 text-[10px] text-ink-400 uppercase tracking-wide">
+                              match
+                              <OpToggle value={c.predicatesOp} onChange={(op) => setPredicatesOp(active, g.id, c.id, op)} />
+                            </span>
+                          )}
                           <button onClick={() => removeCondition(active, g.id, c.id)}
-                                  className="ml-auto text-ink-400 hover:text-bain-600 p-1" aria-label="Remove condition">
+                                  className={`text-ink-400 hover:text-bain-600 p-1 ${nPreds >= 2 ? "" : "ml-auto"}`} aria-label="Remove condition">
                             <X className="w-4 h-4" />
                           </button>
                         </div>
@@ -247,7 +299,7 @@ export function SegmentBuilder() {
                           <div className="space-y-2">
                             {c.predicates.map((p, idx) => (
                               <div key={idx} className="flex items-center gap-2">
-                                {idx > 0 && <span className="text-xs font-semibold text-ink-400 w-6">OR</span>}
+                                {idx > 0 && <span className="text-xs font-semibold text-ink-400 w-8">{c.predicatesOp}</span>}
                                 <Select value={p.op} onChange={(e) => setPredicate(active, g.id, c.id, idx, { op: e.target.value })}
                                         className="w-20 text-center">
                                   {OPS.map(o => <option key={o.v} value={o.v}>{o.label}</option>)}
@@ -267,10 +319,11 @@ export function SegmentBuilder() {
                               </div>
                             ))}
                             <Button variant="ghost" size="sm" onClick={() => addPredicate(active, g.id, c.id)}>
-                              <Plus className="w-3.5 h-3.5" /> OR another comparison
+                              <Plus className="w-3.5 h-3.5" /> {c.predicatesOp === "AND" ? "AND" : "OR"} another comparison
                             </Button>
                           </div>
                         )}
+                        </div>
                       </div>
                     );
                   })}

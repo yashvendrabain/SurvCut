@@ -33,6 +33,8 @@ async def get_schema(
             analysis_eligible=q.analysis_eligible,
             options=[OptionItem(code=str(code), label=str(label))
                      for code, label in q.option_map.items()],
+            sub_options=[OptionItem(code=str(sub), label=str(label))
+                         for sub, label in q.sub_column_labels.items()],
         )
         for q in schema.questions
     ]

@@ -32,6 +32,7 @@ from .classifier import classify, summarise
 from .cross_cut import compute_cross_cut
 from .datamap_parser import parse_datamap, parse_datamap_from_rows
 from .exporter import export, ExportInputs
+from .filtering import apply_selections, segment_labels
 from .models import (
     METADATA_ALLOWLIST,
     CrossCutResult,
@@ -52,7 +53,12 @@ from .models import (
     ValidationReport,
 )
 from .question_type_detector import detect_type
-from .single_cut import compute_all_single_cuts, compute_single_cut
+from .single_cut import (
+    compute_all_single_cuts,
+    compute_grid_matrix,
+    compute_ranking_matrix,
+    compute_single_cut,
+)
 from .theme_grouper import suggest_themes, validate_theme_assignment
 from .validator import format_report, validate
 
@@ -64,6 +70,9 @@ __all__ = [
     "classify", "summarise", "detect_type",
     # Cuts
     "compute_single_cut", "compute_all_single_cuts", "compute_cross_cut",
+    "compute_ranking_matrix", "compute_grid_matrix",
+    # Filtering (dashboard preview)
+    "apply_selections", "segment_labels",
     # Validation
     "validate", "format_report",
     # Themes

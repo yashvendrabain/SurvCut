@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Plus, Trash2, Search, Filter, ArrowRight, ArrowLeft, Layers, Boxes } from "lucide-react";
 
-import { useWizardStore } from "@/lib/store";
+import { useWizardStore, MAX_FILTERS } from "@/lib/store";
 import { WizardProgress } from "@/components/wizard-progress";
 import { SegmentBuilder } from "@/components/segment-builder";
 import { Card } from "@/components/ui/card";
@@ -45,10 +45,19 @@ export default function FiltersSegmentsPage() {
   const assignedQids = useMemo(() => new Set(Object.values(themes).flat()), [themes]);
   const unassigned = eligibleQuestions.filter(x => !assignedQids.has(x.column_id));
 
-  const singleSelects = useMemo(
-    () => eligibleQuestions.filter(x => x.question_type === "single_select" && x.n_options >= 2),
+  // Filterable = single-select questions (with an option list) + multi-select
+  // questions. Both are added as WHOLE questions, mirroring cross-cuts. A
+  // single-select filters by its picked option; a multi-select by a picked
+  // sub-option (or "any answered").
+  const filterable = useMemo(
+    () => eligibleQuestions.filter(
+      x => (x.question_type === "single_select" && x.n_options >= 2)
+        || x.question_type === "multi_select_binary"
+    ),
     [eligibleQuestions]
   );
+  const filterOptionCount = (x: (typeof filterable)[number]) =>
+    x.question_type === "multi_select_binary" ? x.n_sub_columns : x.n_options;
 
   const filteredQuestions = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -77,7 +86,7 @@ export default function FiltersSegmentsPage() {
       <WizardProgress />
 
       <div className="mb-6 animate-fade-in-up">
-        <h1 className="font-display text-4xl font-black tracking-tight mb-2 text-ink-900">Filters and segments</h1>
+        <h1 className="font-display text-4xl font-black tracking-tight mb-2 text-ink-900">Add / create filters</h1>
         <p className="text-ink-500">
           Group questions into theme sheets and choose which become global filter dropdowns. Segmentation lands here next.
         </p>
@@ -262,27 +271,31 @@ export default function FiltersSegmentsPage() {
         <div>
           <div className="mb-4">
             <p className="text-sm text-ink-500 max-w-2xl">
-              Pick up to 12 single-select questions to expose as global filter dropdowns on every theme sheet.
+              Pick up to {MAX_FILTERS} questions to expose as global filter dropdowns on every theme &amp; cross-cut sheet.
+              <strong className="text-ink-700"> Single-select</strong> questions filter by their picked option;
+              <strong className="text-ink-700"> multi-select</strong> questions filter by a picked sub-option (or &ldquo;All&rdquo; = answered any).
               These become the <code className="text-bain-600 font-mono bg-bain-50 px-1.5 py-0.5 rounded">Region / Industry / Sector</code>-style filters at the top of each cut sheet.
             </p>
           </div>
 
           <div className="mb-3 flex items-center gap-3">
-            <Badge tone={filterQids.length >= 10 ? "amber" : "bain"}>
-              {filterQids.length} / 12 selected
+            <Badge tone={filterQids.length >= MAX_FILTERS - 2 ? "amber" : "bain"}>
+              {filterQids.length} / {MAX_FILTERS} selected
             </Badge>
           </div>
 
           <div className="glass rounded-2xl overflow-hidden">
             <div className="max-h-[520px] overflow-y-auto">
-              {singleSelects.map(question => {
+              {filterable.map(question => {
                 const on = filterQids.includes(question.column_id);
+                const atCap = !on && filterQids.length >= MAX_FILTERS;
                 return (
                   <button
                     key={question.column_id}
                     onClick={() => toggleFilter(question.column_id)}
+                    disabled={atCap}
                     className={`w-full text-left px-4 py-2.5 border-b border-ink-100 flex items-center gap-3 transition-colors ${
-                      on ? "bg-bain-50 hover:bg-bain-100" : "hover:bg-ink-50/70"
+                      on ? "bg-bain-50 hover:bg-bain-100" : atCap ? "opacity-40 cursor-not-allowed" : "hover:bg-ink-50/70"
                     }`}
                   >
                     <div className={`flex-shrink-0 w-5 h-5 rounded-md border-2 flex items-center justify-center transition-colors ${
@@ -293,7 +306,8 @@ export default function FiltersSegmentsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-xs text-bain-600">{question.column_id}</span>
-                        <Badge tone="neutral">{question.n_options} options</Badge>
+                        <TypeBadge type={question.question_type} />
+                        <Badge tone="neutral">{filterOptionCount(question)} options</Badge>
                         {question.is_demographic && <Badge tone="blue">demographic</Badge>}
                       </div>
                       <div className="text-sm text-ink-600 truncate mt-0.5">{question.question_text}</div>
@@ -301,9 +315,9 @@ export default function FiltersSegmentsPage() {
                   </button>
                 );
               })}
-              {singleSelects.length === 0 && (
+              {filterable.length === 0 && (
                 <div className="py-8 text-center text-ink-400 text-sm">
-                  No single-select questions with option lists to use as filters.
+                  No single-select or multi-select questions to use as filters.
                 </div>
               )}
             </div>
@@ -317,8 +331,8 @@ export default function FiltersSegmentsPage() {
         <Button variant="ghost" onClick={() => router.push("/validate")}>
           <ArrowLeft className="w-4 h-4" /> Back
         </Button>
-        <Button onClick={() => router.push("/crosscuts")}>
-          Continue to Cross Cuts <ArrowRight className="w-4 h-4" />
+        <Button onClick={() => router.push("/dashboard")}>
+          Continue to Dashboard <ArrowRight className="w-4 h-4" />
         </Button>
       </div>
     </div>

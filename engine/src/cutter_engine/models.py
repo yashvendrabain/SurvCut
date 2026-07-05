@@ -19,7 +19,8 @@ class QuestionType(str, Enum):
     MULTI_SELECT_BINARY = "multi_select_binary"   # Values: 0-1 + sub-cols
     GRID_RATED = "grid_rated"                     # Values: 1-N + sub-cols
     GRID_SINGLE_SELECT = "grid_single_select"     # same shape as grid_rated; classifier may collapse
-    NUMERIC_ALLOCATION = "numeric_allocation"     # Values: 0-100 + sub-cols
+    NUMERIC_ALLOCATION = "numeric_allocation"     # multi-col, no legend, every row sums to exactly 100 (constant-sum / "likert")
+    NUMERIC_GRID = "numeric_grid"                 # multi-col, no legend, free numeric entry per column (does NOT sum to 100)
     NPS = "nps"                                   # Values: 0-10 with recommend/NPS keyword
     DIRECT_NUMERIC = "direct_numeric"             # Open numeric response
     RANKING = "ranking"                           # Values: 1-K + sub-cols (each is a rank)
@@ -203,17 +204,20 @@ class SegmentPredicate:
 @dataclass(slots=True)
 class SegmentCondition:
     """A condition on one raw-data column. The respondent's value in `column`
-    must satisfy ANY of `predicates` (OR within). Conditions are AND-ed inside a
-    group. `column` is a raw-data column header (options or free numeric)."""
+    must satisfy the `predicates` combined by `predicates_op` ("OR" default, or
+    "AND"). `column` is a raw-data column header (options or free numeric)."""
     column: str
     predicates: list[SegmentPredicate] = field(default_factory=list)
+    predicates_op: str = "OR"          # how predicates combine: "OR" | "AND"
 
 
 @dataclass(slots=True)
 class SegmentGroup:
-    """One named option of a segment. Conditions are combined with AND."""
+    """One named option of a segment. Conditions are combined by `conditions_op`
+    ("AND" default, or "OR")."""
     name: str
     conditions: list[SegmentCondition] = field(default_factory=list)
+    conditions_op: str = "AND"         # how conditions combine: "AND" | "OR"
 
 
 @dataclass(slots=True)

@@ -23,21 +23,23 @@ parseable from the type hint. Any replacement module just needs to expose
 this single function with the same signature.
 
 ────────────────────────────────────────────────────────────────────────────
-CURRENT DECISION TREE (heuristic — to be replaced later)
+DECISION TREE (legend-aware; allocation is confirmed against the data in classify)
 ────────────────────────────────────────────────────────────────────────────
 1.  hint = "Open numeric response"        → DIRECT_NUMERIC
 2.  hint = "Open text response"           → OPEN_TEXT
 3.  hint doesn't parse as "Values: M-N"   → UNKNOWN
-4.  range (0,10) + "nps"/"recommend" text
-    AND no sub-cols                       → NPS
-    (without keyword → falls through to single-select)
-5.  range (0,100) + has sub-cols          → NUMERIC_ALLOCATION
-6.  range (0,1)   + has sub-cols          → MULTI_SELECT_BINARY
-7.  range (0,1)   + no  sub-cols          → BINARY_TWO_OPTIONS
-8a. has sub-cols AND _is_ranking_question → RANKING
-    (datamap signals: "rank" word in text OR ≥2 "Rank N" option labels)
-8b. has sub-cols (any other range)        → GRID_RATED
-9.  no sub-cols (default)                 → SINGLE_SELECT
+    has_subs   = block has [SubColID] rows
+    has_legend = block has value→label rows (a coded legend)
+    With sub-columns:
+      a. _is_ranking_question ("rank" in text OR ≥2 "Rank N" labels) → RANKING
+      b. range (0,1)  (0=Unchecked / 1=Checked legend)              → MULTI_SELECT_BINARY
+      c. has_legend   (descriptive value→label legend)              → GRID_RATED
+      d. no legend    (free numeric entry per column)               → NUMERIC_GRID
+         └ classify() promotes NUMERIC_GRID → NUMERIC_ALLOCATION when there are
+           ≥2 columns AND every answered row sums to exactly 100 ("likert").
+    Without sub-columns:
+      range (0,1) → BINARY_TWO_OPTIONS ;  otherwise → SINGLE_SELECT
+    (NPS is no longer special-cased — a 0-10 single column is just SINGLE_SELECT.)
 """
 from __future__ import annotations
 
@@ -129,39 +131,27 @@ def detect_type(
     lo, hi = int(match.group(1)), int(match.group(2))
 
     has_subs = bool(block.sub_columns)
-    qtext_lower = (block.question_text or "").lower()
-    is_nps_text = any(kw in qtext_lower for kw in NPS_KEYWORDS)
+    has_legend = bool(block.scale_options)   # value→label rows present in the datamap
     is_ranking = _is_ranking_question(block)
 
-    # 4. NPS (PROMOTE — not a hard requirement; without keyword falls through
-    #    to SINGLE_SELECT which is also valid output).
-    if (lo, hi) == (0, 10) and is_nps_text and not has_subs:
-        return QuestionType.NPS, (lo, hi)
-
-    # 5. Numeric allocation (0..100 with sub-cols, e.g. % share allocation)
-    if (lo, hi) == (0, 100) and has_subs:
-        return QuestionType.NUMERIC_ALLOCATION, (lo, hi)
-
-    # 6. Multi-select binary (0..1 with sub-cols, one binary per sub-col)
-    if (lo, hi) == (0, 1) and has_subs:
-        return QuestionType.MULTI_SELECT_BINARY, (lo, hi)
-
-    # 7. Binary two-options (0..1 no sub-cols)
-    if (lo, hi) == (0, 1) and not has_subs:
-        return QuestionType.BINARY_TWO_OPTIONS, (lo, hi)
-
-    # 8a. Ranking — datamap signals (text OR labels)
-    if has_subs and is_ranking:
-        return QuestionType.RANKING, (lo, hi)
-
-    # 8b. Grid rated — any other range with sub-cols
-    #     (covers Likert 1..N AND Q13-class signed ranges like -50..100)
+    # ── Multi-column blocks: distinguish by the legend, then (for legend-less
+    #    numeric grids) by the data in classify(). ──────────────────────────
     if has_subs:
-        return QuestionType.GRID_RATED, (lo, hi)
+        # Ranking — legend labels are "Rank N" (or "rank" appears in the text).
+        if is_ranking:
+            return QuestionType.RANKING, (lo, hi)
+        # Select-all — coded 0/1 legend (0=Unchecked, 1=Checked).
+        if (lo, hi) == (0, 1):
+            return QuestionType.MULTI_SELECT_BINARY, (lo, hi)
+        # A descriptive value→label legend → rated / non-numerical grid.
+        if has_legend:
+            return QuestionType.GRID_RATED, (lo, hi)
+        # No legend → free numeric entry per column. NUMERIC_GRID is the default;
+        # classify() promotes it to NUMERIC_ALLOCATION ("likert" constant-sum)
+        # only when every answered row sums to exactly 100 (needs the data).
+        return QuestionType.NUMERIC_GRID, (lo, hi)
 
-    # 9. Single-select (default for no-sub-cols)
-    if not has_subs:
-        return QuestionType.SINGLE_SELECT, (lo, hi)
-
-    # Unreachable in practice (cases above are exhaustive for has_subs/lo/hi).
-    return QuestionType.UNKNOWN, (lo, hi)
+    # ── Single-column blocks. ────────────────────────────────────────────────
+    if (lo, hi) == (0, 1):
+        return QuestionType.BINARY_TWO_OPTIONS, (lo, hi)
+    return QuestionType.SINGLE_SELECT, (lo, hi)

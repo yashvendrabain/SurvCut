@@ -81,7 +81,7 @@ export default function CrossCutsPage() {
       <WizardProgress />
 
       <div className="mb-6 animate-fade-in-up">
-        <h1 className="font-display text-4xl font-black tracking-tight mb-2 text-ink-900">Cross cuts</h1>
+        <h1 className="font-display text-4xl font-black tracking-tight mb-2 text-ink-900">Create cuts</h1>
         <p className="text-ink-500 max-w-3xl">
           Build a matrix of two questions — row categories against column categories. Each cell counts the
           respondents in both. Add matrices to the queue and they&rsquo;ll be written as separate sheets when you Generate.
@@ -209,7 +209,7 @@ export default function CrossCutsPage() {
       </div>
 
       <div className="flex justify-between items-center mt-8">
-        <Button variant="ghost" onClick={() => router.push("/filters-segments")}>
+        <Button variant="ghost" onClick={() => router.push("/dashboard")}>
           <ArrowLeft className="w-4 h-4" /> Back
         </Button>
         <Button onClick={() => router.push("/generate")}>

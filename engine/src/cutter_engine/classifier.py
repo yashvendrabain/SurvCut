@@ -50,6 +50,27 @@ def _is_demographic(qtext: str) -> bool:
     return any(kw in low for kw in DEMOGRAPHIC_KEYWORDS)
 
 
+def _sums_to_100(block: ParsedBlock, df: pd.DataFrame) -> bool:
+    """True iff a legend-less numeric multi-column block is a constant-sum
+    ("likert") allocation: ≥2 sub-columns AND EVERY respondent who answered it
+    has those columns summing to exactly 100.
+
+    Blanks are counted as 0; the sum is rounded to 2 dp only to absorb
+    floating-point noise (33.33+33.33+33.34) — this is NOT a tolerance band,
+    so 99 or 101 still fails. A single non-100 answered row → not allocation.
+    """
+    subs = [sub_id for sub_id, _ in block.sub_columns]
+    present = [c for c in subs if c in df.columns]
+    if len(present) < 2:
+        return False
+    sub = df[present].apply(pd.to_numeric, errors="coerce")
+    answered = sub.notna().any(axis=1)
+    if not bool(answered.any()):
+        return False
+    rowsum = sub[answered].fillna(0).sum(axis=1)
+    return bool((rowsum.round(2) == 100).all())
+
+
 def classify(parsed: list[ParsedBlock],
              raw_df: pd.DataFrame,
              respondent_id_column: str | None = None) -> SurveySchema:
@@ -58,6 +79,10 @@ def classify(parsed: list[ParsedBlock],
 
     for block in parsed:
         qtype, scale_range = detect_type(block)
+        # Data-confirmed promotion: a legend-less numeric grid is a constant-sum
+        # "likert" allocation only if every answered row sums to exactly 100.
+        if qtype == QuestionType.NUMERIC_GRID and _sums_to_100(block, raw_df):
+            qtype = QuestionType.NUMERIC_ALLOCATION
         raw_cols = _raw_columns_for(block)
         option_map = _option_map_for(block)
 

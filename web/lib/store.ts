@@ -20,12 +20,14 @@ export interface SegmentPredicate {
 export interface SegmentCondition {
   id: string;
   column: string;         // any raw-data column
-  predicates: SegmentPredicate[];   // OR'd together
+  predicates: SegmentPredicate[];   // combined by predicatesOp
+  predicatesOp: "AND" | "OR";       // how the options/comparisons combine (default OR)
 }
 export interface SegmentGroup {
   id: string;
   name: string;
-  conditions: SegmentCondition[];   // AND'd together
+  conditions: SegmentCondition[];   // combined by conditionsOp
+  conditionsOp: "AND" | "OR";       // how the question conditions combine (default AND)
 }
 export interface Segment {
   id: string;
@@ -40,6 +42,10 @@ export function newId(prefix = "id"): string {
   _uid += 1;
   return `${prefix}_${_uid}_${Math.floor(Math.random() * 1e6)}`;
 }
+
+// Max number of global filter slots that can be added. Raised well above the
+// old cap of 12 — the filter panel is a vertical list, so cuts just start lower.
+export const MAX_FILTERS = 40;
 
 interface WizardState {
   // Session
@@ -168,7 +174,7 @@ export const useWizardStore = create<WizardState>((set, get) => ({
   toggleFilter: (qid) => set(state => ({
     filterQids: state.filterQids.includes(qid)
       ? state.filterQids.filter(x => x !== qid)
-      : [...state.filterQids, qid].slice(0, 12),
+      : [...state.filterQids, qid].slice(0, MAX_FILTERS),
   })),
 
   addSegment: () => {
@@ -177,7 +183,7 @@ export const useWizardStore = create<WizardState>((set, get) => ({
     const seg: Segment = {
       id,
       name: `Segment ${n}`,
-      groups: [{ id: newId("grp"), name: "Option 1", conditions: [] }],
+      groups: [{ id: newId("grp"), name: "Option 1", conditions: [], conditionsOp: "AND" }],
       includeOthers: true,
       othersLabel: "Others",
     };

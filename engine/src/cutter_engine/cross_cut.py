@@ -53,7 +53,7 @@ def compute_cross_cut(
     # Each sub-col becomes its own row category. Cell aggregation depends on
     # the row TYPE — means for grids, counts of top-3 picks for ranking.
     ROW_SUBCOL_TYPES = (QuestionType.GRID_RATED, QuestionType.NUMERIC_ALLOCATION,
-                        QuestionType.RANKING)
+                        QuestionType.NUMERIC_GRID, QuestionType.RANKING)
     if row_question.question_type in ROW_SUBCOL_TYPES:
         return _cross_with_subcol_row(row_question, col_question, df)
 
@@ -113,8 +113,8 @@ def _categorise(question: QuestionSpec, df: pd.DataFrame) -> list[list[str]] | N
     # For each respondent, return the list of sub-col labels they engaged
     # with. The downstream cell function then accumulates per (row_label,
     # col_label) the same way it already does for multi-select.
-    if qt == QuestionType.GRID_RATED:
-        # Engaged = any non-null value (respondent rated this row).
+    if qt in (QuestionType.GRID_RATED, QuestionType.NUMERIC_GRID):
+        # Engaged = any non-null value (respondent answered this row).
         return _to_labels_subcol(question, df, lambda v: pd.notna(v))
     if qt == QuestionType.RANKING:
         # Engaged = a real rank was assigned (numeric, >= 1).
@@ -216,9 +216,7 @@ def _ordered_categories(question: QuestionSpec) -> list[str]:
         return ["Promoters (9-10)", "Passives (7-8)", "Detractors (0-6)"]
     if qt == QuestionType.RANKING:
         return [question.sub_column_labels.get(c, c) for c in question.raw_columns]
-    if qt == QuestionType.GRID_RATED:
-        return [question.sub_column_labels.get(c, c) for c in question.raw_columns]
-    if qt == QuestionType.NUMERIC_ALLOCATION:
+    if qt in (QuestionType.GRID_RATED, QuestionType.NUMERIC_ALLOCATION, QuestionType.NUMERIC_GRID):
         return [question.sub_column_labels.get(c, c) for c in question.raw_columns]
     if qt == QuestionType.DIRECT_NUMERIC:
         return ["Mean", "Median", "Min", "Max"]
@@ -551,6 +549,7 @@ _CELL_FN_BY_COL_TYPE = {
     QuestionType.NPS: _cell_counts_nps,
     QuestionType.DIRECT_NUMERIC: _cell_means_numeric,
     QuestionType.NUMERIC_ALLOCATION: _cell_means_grid,
+    QuestionType.NUMERIC_GRID: _cell_means_grid,
     QuestionType.GRID_RATED: _cell_means_grid,
     QuestionType.GRID_SINGLE_SELECT: _cell_means_grid,
     QuestionType.RANKING: _cell_pct_ranking,

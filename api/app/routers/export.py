@@ -13,10 +13,6 @@ from typing import Any
 from cutter_engine import (
     ExportInputs,
     FilterSlot,
-    Segment,
-    SegmentCondition,
-    SegmentGroup,
-    SegmentPredicate,
     ThemeGroup,
     compute_cross_cut,
     export,
@@ -26,6 +22,7 @@ from fastapi.responses import FileResponse
 
 from ..deps import get_sessions
 from ..schemas.responses import BuildRequest, BuildResponse
+from ..segment_convert import to_engine_segments
 
 router = APIRouter()
 
@@ -62,28 +59,7 @@ async def build_workbook(
             cross_cuts.append(cc)
 
     # Build segment domain objects (custom filters materialised as helper columns)
-    segments = [
-        Segment(
-            name=s.name,
-            include_others=s.include_others,
-            others_label=s.others_label,
-            groups=[
-                SegmentGroup(
-                    name=g.name,
-                    conditions=[
-                        SegmentCondition(
-                            column=c.column,
-                            predicates=[SegmentPredicate(op=p.op, value=p.value)
-                                        for p in c.predicates],
-                        )
-                        for c in g.conditions
-                    ],
-                )
-                for g in s.groups
-            ],
-        )
-        for s in req.segments
-    ]
+    segments = to_engine_segments(req.segments)
 
     out_path = os.path.join(tempfile.gettempdir(),
                             f"cutter_api_{req.session_id[:8]}.xlsx")

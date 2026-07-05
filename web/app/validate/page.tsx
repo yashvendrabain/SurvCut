@@ -177,7 +177,7 @@ export default function ValidatePage() {
           <ArrowLeft className="w-4 h-4" /> Back
         </Button>
         <Button onClick={() => router.push("/filters-segments")}>
-          Continue to Filters &amp; segments <ArrowRight className="w-4 h-4" />
+          Continue to add/create filters <ArrowRight className="w-4 h-4" />
         </Button>
       </div>
     </div>
