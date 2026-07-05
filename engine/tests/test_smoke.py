@@ -71,7 +71,9 @@ def test_ranking_detection_via_rank_label():
 
 
 def test_frankly_not_ranking():
-    """Word-boundary regex should NOT match 'rank' inside 'frankly'."""
+    """Word-boundary regex must NOT match 'rank' inside 'frankly'. With no
+    value->label legend, a numeric sub-column block is NUMERIC_GRID (a legend
+    would make it GRID_RATED) — the point is it is never RANKING."""
     from cutter_engine import parse_datamap_from_rows, detect_type, QuestionType
     rows = [
         ("[Q4]: Frankly, how do you feel?", None, None),
@@ -82,4 +84,30 @@ def test_frankly_not_ranking():
     ]
     blocks = parse_datamap_from_rows(rows)
     qtype, _ = detect_type(blocks[0])
-    assert qtype == QuestionType.GRID_RATED
+    assert qtype != QuestionType.RANKING
+    assert qtype == QuestionType.NUMERIC_GRID
+
+
+def test_grid_vs_numeric_vs_allocation():
+    """Legend-aware split: descriptive legend -> GRID_RATED; legend-less numeric
+    -> NUMERIC_GRID, promoted to NUMERIC_ALLOCATION only when every answered row
+    sums to exactly 100."""
+    from cutter_engine import parse_datamap_from_rows, classify, QuestionType
+    rows = [
+        ("[QA]: Split 100 across", None, None), ("Values: 0-100", None, None),
+        (None, "[QAr1]", "X"), (None, "[QAr2]", "Y"), (None, None, None),
+        ("[QN]: Enter any values", None, None), ("Values: -50-100", None, None),
+        (None, "[QNr1]", "X"), (None, "[QNr2]", "Y"), (None, None, None),
+        ("[QG]: Rate each item", None, None), ("Values: 1-3", None, None),
+        (None, "1", "Low"), (None, "2", "Mid"), (None, "3", "High"),
+        (None, "[QGr1]", "X"), (None, "[QGr2]", "Y"), (None, None, None),
+    ]
+    df = pd.DataFrame({
+        "QAr1": [40, 60], "QAr2": [60, 40],   # every row sums to 100 -> allocation
+        "QNr1": [10, -5], "QNr2": [3, 7],      # arbitrary numbers -> numeric grid
+        "QGr1": [1, 2], "QGr2": [3, 1],        # has a legend -> rated grid
+    })
+    schema = classify(parse_datamap_from_rows(rows), df)
+    assert schema.by_column_id("QA").question_type == QuestionType.NUMERIC_ALLOCATION
+    assert schema.by_column_id("QN").question_type == QuestionType.NUMERIC_GRID
+    assert schema.by_column_id("QG").question_type == QuestionType.GRID_RATED
