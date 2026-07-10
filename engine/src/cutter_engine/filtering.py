@@ -134,9 +134,10 @@ def apply_selections(
     Args:
       filters: (column_id, value) pairs — pass EVERY configured filter, not just
                the changed ones. `value` is an option/sub-option LABEL, or "All".
-               "All" is Excel's `"<>"` (single: non-blank; multi: selected ≥1),
-               NOT "no constraint" — so a filter left on "All" still restricts to
-               respondents who answered that question, just like the workbook.
+               "All" means NO constraint on that dimension (include everyone); a
+               filter only narrows once a specific value is picked. This matches
+               the workbook, whose "All" branch counts every respondent (via an
+               always-true helper column) rather than requiring a non-blank answer.
       segments: Segment definitions for the picked/configured segments.
       segment_picks: {segment_name -> picked group label or "All"}.
 
@@ -154,25 +155,23 @@ def apply_selections(
         q = schema.by_column_id(column_id)
         if q is None:
             continue
+        if value in _EMPTY:
+            # "All" is a true no-op: it never restricts the base. A filter only
+            # narrows once the user picks a specific value. (Applying "<>" here
+            # would wrongly drop respondents who skipped a conditional/skip-logic
+            # question, collapsing the base to 0 when filters span branches.)
+            continue
         if q.question_type == QuestionType.MULTI_SELECT_BINARY:
             subs = [c for c in q.raw_columns if c in df.columns]
             if not subs:
                 continue
-            if value in _EMPTY:
-                # Excel: CHOOSE→_q_sum, ">=1"  (respondents who selected ≥1 option).
-                sub_num = df[subs].apply(pd.to_numeric, errors="coerce").fillna(0)
-                mask &= (sub_num.sum(axis=1) >= 1)
-            else:
-                sub = _sublabel_to_col(q).get(str(value))
-                if sub and sub in df.columns:
-                    mask &= (pd.to_numeric(df[sub], errors="coerce") >= 1)
+            sub = _sublabel_to_col(q).get(str(value))
+            if sub and sub in df.columns:
+                mask &= (pd.to_numeric(df[sub], errors="coerce") >= 1)
         elif q.raw_columns and q.raw_columns[0] in df.columns:
             col = q.raw_columns[0]
-            if value in _EMPTY:
-                mask &= df[col].notna()                      # Excel "<>" = non-blank
-            else:
-                code = _reverse_option_map(q).get(str(value), value)
-                mask &= _match_code(df[col], code)
+            code = _reverse_option_map(q).get(str(value), value)
+            mask &= _match_code(df[col], code)
 
     # Segments — each configured segment is also a Global Filter. At "All" the
     # workbook's `"<>"` on the helper keeps everyone when include_others is on

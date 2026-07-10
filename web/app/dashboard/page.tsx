@@ -222,8 +222,10 @@ export default function DashboardPage() {
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
             {cutIds.map(id => {
               const entry = cuts[id];
-              const ready = entry && entry.selKey === selKey && entry.data;
-              const c = ready ? entry!.data! : null;
+              // "ready" = the fetch for the CURRENT selection has resolved (even
+              // if it came back empty); "c" = the actual cut data (may be null).
+              const ready = !!entry && entry.selKey === selKey;
+              const c = ready ? entry!.data : null;
               const star = considered["c:" + id];
               const view = cutView[id] ?? "chart";
               return (

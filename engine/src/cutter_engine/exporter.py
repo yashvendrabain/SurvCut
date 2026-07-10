@@ -196,6 +196,10 @@ _MAX_FILTERS = 40
 # runs full-width and never looks "cut off" beside a wide grid / matrix table.
 _HEADER_SPAN_COL = 677  # ZA
 
+# Header of the always-true helper column appended to Raw data. A filter on "All"
+# routes its COUNTIFS clause to this constant-1 column so "All" = every respondent.
+_ALL_HELPER = "__ALL__"
+
 
 def export(inputs: ExportInputs, output_path: str | Path) -> Path:
     """Build the workbook and write to `output_path`. Returns the path."""
@@ -328,6 +332,19 @@ def _build_raw_data_sheet(
             if pd.isna(v):
                 continue
             _style(ws.cell(row=r_idx, column=c_idx, value=v), font=_F_BODY)
+
+    # Always-true helper column: a constant 1 for every respondent. Global filters
+    # left on "All" point their COUNTIFS clause here (criterion "<>") so "All"
+    # counts EVERYONE — including respondents who skipped a conditional question —
+    # instead of dropping them. See _filter_clause.
+    all_col = len(raw_df.columns) + 1
+    all_letter = get_column_letter(all_col)
+    col_to_letter[_ALL_HELPER] = all_letter
+    _style(ws.cell(row=1, column=all_col, value=_ALL_HELPER),
+           font=_F_HEAD, fill=_FILL_GRAY, border=_BORDER)
+    ws.column_dimensions[all_letter].width = 8
+    for r_idx in range(2, len(raw_df) + 2):
+        _style(ws.cell(row=r_idx, column=all_col, value=1), font=_F_BODY)
 
     ws.freeze_panes = "A2"
     return col_to_letter
@@ -788,8 +805,18 @@ def _write_question_cut(
 
 
 def _filter_clause(filter_refs, raw_col_to_letter, raw_sheet_name, n_raw_rows) -> str:
-    """COUNTIFS filter clause: for each filter, `range, IF(cell="All","<>", code)`
-    where the picked LABEL is translated to its CODE via VLOOKUP against Validation."""
+    """COUNTIFS filter clause. "All" is a true no-op: it counts EVERY respondent
+    (including those who skipped a conditional question), so a filter only narrows
+    once a specific value is picked. Achieved by routing the "All" branch to the
+    always-true `__ALL__` helper column (constant 1) instead of applying `"<>"` to
+    the question column — which would drop skippers and, across skip-logic
+    branches, collapse the base to 0. The picked LABEL is translated to its CODE
+    via VLOOKUP against Validation."""
+    n1 = n_raw_rows + 1
+    all_letter = raw_col_to_letter.get(_ALL_HELPER)
+    all_range = (
+        f"'{raw_sheet_name}'!${all_letter}$2:${all_letter}${n1}" if all_letter else None
+    )
     parts: list[str] = []
     for entry in filter_refs:
         mspec: dict | None = None
@@ -802,25 +829,35 @@ def _filter_clause(filter_refs, raw_col_to_letter, raw_sheet_name, n_raw_rows) -
             lookup_range = None
         if mspec:
             # Multi-select filter. The picked label selects which raw column the
-            # criterion applies to: "All" → the _q_sum column (answered any),
-            # a sub-option → that sub-column. Criterion ">=1" works for both
-            # (q_sum>=1 = answered any; a 0/1 sub-col >=1 = selected).
+            # criterion (">=1") applies to. Slot 0 ("All") points at the constant
+            # __ALL__ column so "All" counts everyone; a sub-option points at that
+            # 0/1 sub-column so ">=1" = selected. (Falls back to the _q_sum column
+            # = answered-any if the helper is unavailable.)
+            choose_ranges = list(mspec["choose_ranges"])
+            if all_range and choose_ranges:
+                choose_ranges[0] = all_range
             choose = (f'CHOOSE(MATCH({cell_ref},{mspec["label_range"]},0),'
-                      + ",".join(mspec["choose_ranges"]) + ")")
+                      + ",".join(choose_ranges) + ")")
             parts.append(f'{choose},">=1"')
             continue
         col_letter = raw_col_to_letter.get(f.column_id)
         if not col_letter:
             continue
-        full_range = f"'{raw_sheet_name}'!${col_letter}$2:${col_letter}${n_raw_rows + 1}"
+        full_range = f"'{raw_sheet_name}'!${col_letter}$2:${col_letter}${n1}"
         if lookup_range:
-            criterion = (
-                f'IF({cell_ref}="All","<>",'
-                f'IFERROR(VLOOKUP({cell_ref},{lookup_range},2,FALSE),{cell_ref}))'
-            )
+            value_crit = f"IFERROR(VLOOKUP({cell_ref},{lookup_range},2,FALSE),{cell_ref})"
         else:
-            criterion = f'IF({cell_ref}="All","<>",{cell_ref})'
-        parts.append(f"{full_range},{criterion}")
+            value_crit = f"{cell_ref}"
+        if all_range:
+            # "All" → count the constant-1 helper (non-blank everywhere); a value →
+            # count the question column matching the picked code. Both CHOOSE arms
+            # are equal-height ranges, as COUNTIFS requires.
+            rng = f'CHOOSE(IF({cell_ref}="All",1,2),{all_range},{full_range})'
+            criterion = f'IF({cell_ref}="All","<>",{value_crit})'
+        else:
+            rng = full_range
+            criterion = f'IF({cell_ref}="All","<>",{value_crit})'
+        parts.append(f"{rng},{criterion}")
     return ",".join(parts)
 
 
